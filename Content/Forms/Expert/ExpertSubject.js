@@ -43,9 +43,7 @@ const ExpertSubjectScreen = ({navigation}) => {
       const response = await fetch(
         `${Config.BASE_URL}${Config.ENDPOINTS.getExpertSubject}?expertId=${userId}`,
       );
-      console.log(
-        `${Config.BASE_URL}${Config.ENDPOINTS.getExpertSubject}?expertId=${userId}`,
-      );
+
       const data = await response.json();
       setSubjects(Array.isArray(data) ? data : [data]);
       setError('');

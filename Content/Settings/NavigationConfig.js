@@ -23,6 +23,8 @@ import RoundsScreen from '../Forms/Student/CompetitonRounds';
 import MCQScreen from '../Forms/Student/McqRound';
 import SpeedProgrammingScreen from '../Forms/Student/SpeedProgrammingRound';
 import ShuffleRoundScreen from '../Forms/Student/ShuffleRound';
+import CheckTaskscreen from '../Forms/Expert/CheckTask';
+import CheckAttemptedTaskQuestion from '../Forms/Expert/CheckAttemptedTaskQuestion';
 
 const Stack = createStackNavigator();
 
@@ -77,6 +79,11 @@ const Navigation = () => {
           component={SpeedProgrammingScreen}
         />
         <Stack.Screen name="ShuffleScreen" component={ShuffleRoundScreen} />
+        <Stack.Screen name="CheckTask" component={CheckTaskscreen} />
+        <Stack.Screen
+          name="CheckAttemptedTaskQuestion"
+          component={CheckAttemptedTaskQuestion}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

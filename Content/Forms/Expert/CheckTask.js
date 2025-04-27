@@ -6,26 +6,36 @@ import {
   FlatList,
   ActivityIndicator,
   RefreshControl,
+  TouchableOpacity,
 } from 'react-native';
 import Config from '../../Settings/Config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useNavigation} from '@react-navigation/native';
 
 const CheckTaskscreen = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [noTasksMessage, setNoTasksMessage] = useState('');
+  const [storedUserId, setStoredUserId] = useState(null);
+  const navigation = useNavigation();
 
-  const fetchTasks = async () => {
+  const fetchTasks = async userId => {
     try {
-      const userId = 9; // Hardcoded for now
       const response = await fetch(
         `${Config.BASE_URL}/api/Task/GetTasksByUser?userId=${userId}`,
       );
       if (!response.ok) throw new Error('Failed to fetch tasks');
       const data = await response.json();
-      console.log('Fetched tasks:', data);
+      if (data.length === 0) {
+        setNoTasksMessage('Task has no submission till yet.');
+      } else {
+        setNoTasksMessage('');
+      }
       setTasks(data);
     } catch (error) {
       console.error('Error fetching tasks:', error.message);
+      setNoTasksMessage('Failed to fetch tasks.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -33,16 +43,31 @@ const CheckTaskscreen = () => {
   };
 
   useEffect(() => {
-    fetchTasks();
+    const fetchUserIdAndTasks = async () => {
+      const userId = await AsyncStorage.getItem('userId');
+      if (userId) {
+        setStoredUserId(userId);
+        fetchTasks(userId);
+      }
+    };
+    fetchUserIdAndTasks();
   }, []);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchTasks();
+    if (storedUserId) {
+      fetchTasks(storedUserId);
+    }
   };
 
   const renderItem = ({item}) => (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() =>
+        navigation.navigate('CheckAttemptedTaskQuestion', {
+          taskId: item.id,
+        })
+      }>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle}>Week No: {item.id}</Text>
         <Text style={styles.cardSubtitle}>
@@ -52,7 +77,7 @@ const CheckTaskscreen = () => {
           End: {item.endDate?.split('T')[0]}
         </Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   if (loading) {
@@ -66,24 +91,25 @@ const CheckTaskscreen = () => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={tasks}
-        keyExtractor={item => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={
-          tasks.length ? styles.listContent : styles.emptyContent
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#FFD700']}
-          />
-        }
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>No tasks found.</Text>
-        }
-      />
+      {noTasksMessage ? (
+        <View style={styles.emptyContent}>
+          <Text style={styles.emptyText}>{noTasksMessage}</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={tasks}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#FFD700']}
+            />
+          }
+        />
+      )}
     </View>
   );
 };
@@ -97,7 +123,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   emptyContent: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,

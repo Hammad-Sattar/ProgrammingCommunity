@@ -24,8 +24,7 @@ const AddSubjectExpertise = () => {
     const initialize = async () => {
       const storedUserId = await AsyncStorage.getItem('userId');
       if (storedUserId) {
-        setUserId(parseInt(storedUserId, 10));
-        fetchSubjects();
+        setUserId(parseInt(storedUserId));
       } else {
         Alert.alert('Authentication Required', 'Please log in to continue', [
           {text: 'OK', onPress: () => navigation.goBack()},
@@ -35,14 +34,32 @@ const AddSubjectExpertise = () => {
     initialize();
   }, []);
 
+  useEffect(() => {
+    if (userId !== null) {
+      fetchSubjects();
+    }
+  }, [userId]);
+
   const fetchSubjects = async () => {
+    if (!userId) return;
+
     setLoading(true);
     try {
       const response = await fetch(
-        `${Config.BASE_URL}${Config.ENDPOINTS.getAllSubjects}`,
+        `${Config.BASE_URL}/api/Subject/GetAvailableSubjects?userId=${userId}`,
+        {
+          method: 'GET',
+          headers: {'Content-Type': 'application/json'},
+        },
       );
+
       const data = await response.json();
-      setSubjects(data);
+
+      if (response.ok) {
+        setSubjects(data);
+      } else {
+        Alert.alert('Error', 'Failed to fetch subjects list');
+      }
     } catch (error) {
       Alert.alert('Connection Error', 'Failed to fetch subjects list');
     } finally {
@@ -52,7 +69,6 @@ const AddSubjectExpertise = () => {
 
   const addSubjectExpertise = async subjectCode => {
     if (!userId) return;
-    console.log('Adding expertise...' + subjectCode, userId, userId);
 
     try {
       const response = await fetch(

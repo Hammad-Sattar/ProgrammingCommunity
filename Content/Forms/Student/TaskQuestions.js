@@ -67,17 +67,18 @@ const TaskAnswerScreen = () => {
       const oRes = await fetch(
         `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${qd.id}`,
       );
-      setOptions(await oRes.json());
+      const fetchedOptions = await oRes.json();
+      setOptions(fetchedOptions);
+
+      const prev = submittedAnswers.find(a => a.questionId === qd.id);
+      if (prev) {
+        const opt = fetchedOptions.find(o => o.option === prev.answer);
+        setSelectedOption(opt?.id ?? null);
+      }
     } else {
       setOptions([]);
-    }
-
-    const prev = submittedAnswers.find(a => a.questionId === qd.id);
-    if (prev) {
-      if (qd.type === 2) {
-        const opt = options.find(o => o.option === prev.answer);
-        setSelectedOption(opt?.id ?? null);
-      } else {
+      const prev = submittedAnswers.find(a => a.questionId === qd.id);
+      if (prev) {
         setAnswer(prev.answer);
       }
     }
@@ -134,18 +135,48 @@ const TaskAnswerScreen = () => {
   };
 
   const handleFinalSubmit = async () => {
-    if (!saveAnswer()) return;
-    if (!userId) return Alert.alert('Error', 'User not authenticated');
-    if (submittedAnswers.length - 1 == totalQuestions) {
-      return Alert.alert('Error', 'Please answer all questions');
+    if (!question) return;
+
+    const answerValue =
+      question.type === 2
+        ? options.find(o => o.id === selectedOption)?.option || ''
+        : answer.trim();
+
+    if (question.type === 2 && !selectedOption) {
+      Alert.alert('Error', 'Please select an option');
+      return;
     }
-    console.log('Submitting answers:', submittedAnswers);
+
+    if (question.type === 1 && !answerValue) {
+      Alert.alert('Error', 'Please enter your answer');
+      return;
+    }
+
+    const tempAnswers = submittedAnswers.filter(
+      a => a.questionId !== question.id,
+    );
+
+    tempAnswers.push({
+      id: 0,
+      taskId,
+      questionId: question.id,
+      userId,
+      answer: answerValue,
+      submissionDate: new Date().toISOString().split('T')[0],
+      submissionTime: new Date().toTimeString().split(' ')[0] + '.0000000',
+      score: 0,
+    });
+
+    if (tempAnswers.length < totalQuestions) {
+      Alert.alert('Error', 'Please answer all questions');
+      return;
+    }
 
     setSubmitting(true);
     await fetch(`${Config.BASE_URL}/api/SubmittedTask/AddSubmittedTask`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(submittedAnswers),
+      body: JSON.stringify(tempAnswers),
     });
     await fetch(`${Config.BASE_URL}/api/Task/Attempt/${taskId}`, {
       method: 'PUT',

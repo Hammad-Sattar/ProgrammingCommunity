@@ -12,8 +12,9 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useNavigation} from '@react-navigation/native';
 
-const CreateTaskScreen = ({navigation}) => {
+const CreateTaskScreen = () => {
   const [question, setQuestion] = useState('');
   const [minLevel, setMinLevel] = useState('');
   const [maxLevel, setMaxLevel] = useState('');
@@ -29,6 +30,7 @@ const CreateTaskScreen = ({navigation}) => {
   const [isAddQuestionDisabled, setIsAddQuestionDisabled] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [userId, setUserId] = useState(null);
+  const navigation = useNavigation();
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -160,8 +162,6 @@ const CreateTaskScreen = ({navigation}) => {
         },
       );
 
-      if (!response.ok) throw new Error('Failed to add question to task');
-
       const result = await response.text();
       setAddedQuestions(prev => ({...prev, [question.id]: true}));
       Alert.alert('Success', result);
@@ -187,6 +187,10 @@ const CreateTaskScreen = ({navigation}) => {
     setFilteredQuestions([]);
     setIsAddQuestionDisabled(false);
     setSearchQuery('');
+  };
+
+  const handleEvaluateTask = () => {
+    navigation.navigate('CheckTask');
   };
 
   const renderQuestionItem = ({item}) => {
@@ -221,7 +225,15 @@ const CreateTaskScreen = ({navigation}) => {
 
   return (
     <Animated.View style={[styles.container, {opacity: fadeAnim}]}>
-      <Text style={styles.header}>📚 Make a Quiz</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>📚 Make a Task</Text>
+        <TouchableOpacity
+          style={styles.evaluateButton}
+          activeOpacity={0.8}
+          onPress={handleEvaluateTask}>
+          <Text style={styles.evaluateButtonText}>📝 Evaluate</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.label}>Min Level:</Text>
       <TextInput
@@ -281,7 +293,6 @@ const CreateTaskScreen = ({navigation}) => {
         <Text style={styles.buttonText}>➕ Add Question</Text>
       </TouchableOpacity>
 
-      {/* Render search field and questions list only when questions are loaded */}
       {questions.length > 0 && (
         <>
           <TextInput
@@ -326,12 +337,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   header: {
     fontSize: 26,
     fontWeight: 'bold',
     color: '#FFD700',
-    marginBottom: 20,
-    textAlign: 'center',
+  },
+  evaluateButton: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+  },
+  evaluateButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
   label: {
     alignSelf: 'flex-start',
