@@ -25,6 +25,9 @@ import SpeedProgrammingScreen from '../Forms/Student/SpeedProgrammingRound';
 import ShuffleRoundScreen from '../Forms/Student/ShuffleRound';
 import CheckTaskscreen from '../Forms/Expert/CheckTask';
 import CheckAttemptedTaskQuestion from '../Forms/Expert/CheckAttemptedTaskQuestion';
+import ExpertLeadearBoard from '../Forms/Expert/ExpertLeaderboard';
+import ExpertLeadearBoardRoundScreen from '../Forms/Expert/ExpertLeaderBoardRounds';
+import ExpertLeaderboardResultScreen from '../Forms/Expert/ExpertLeadearBoardResult';
 
 const Stack = createStackNavigator();
 
@@ -83,6 +86,18 @@ const Navigation = () => {
         <Stack.Screen
           name="CheckAttemptedTaskQuestion"
           component={CheckAttemptedTaskQuestion}
+        />
+        <Stack.Screen
+          name="ExpertLeadearBoard"
+          component={ExpertLeadearBoard}
+        />
+        <Stack.Screen
+          name="ExpertLeaderboardRound"
+          component={ExpertLeadearBoardRoundScreen}
+        />
+        <Stack.Screen
+          name="ExpertLeaderboardResult"
+          component={ExpertLeaderboardResultScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

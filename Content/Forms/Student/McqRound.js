@@ -1,5 +1,3 @@
-// MCQScreen.js
-
 import React, {useEffect, useState} from 'react';
 import {
   View,
@@ -14,20 +12,65 @@ import {
 } from 'react-native';
 import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useRoute} from '@react-navigation/native';
+import {useRoute, useNavigation} from '@react-navigation/native';
 
 const MCQScreen = () => {
+  const navigation = useNavigation();
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [showReview, setShowReview] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [qualificationStatus, setQualificationStatus] = useState(null);
+  const [teamId, setTeamId] = useState(null);
   const route = useRoute();
   const {roundId} = route.params || {};
   const competitionRoundId = roundId || 1;
 
   useEffect(() => {
+    const initialize = async () => {
+      try {
+        const storedTeamId = await AsyncStorage.getItem('teamId');
+        if (!storedTeamId) {
+          Alert.alert('Error', 'Team ID not found.');
+          return;
+        }
+        setTeamId(parseInt(storedTeamId, 10));
+      } catch (err) {
+        console.error(err);
+        Alert.alert('Error', 'Failed to retrieve team ID.');
+      }
+    };
+
+    initialize();
+  }, []);
+
+  useEffect(() => {
+    const checkQualificationStatus = async () => {
+      if (competitionRoundId <= 1) {
+        fetchQuestions();
+        return;
+      }
+      const response = await fetch(
+        `${
+          Config.BASE_URL
+        }/api/RoundResult/CheckQualificationStatus/${teamId}/${
+          competitionRoundId - 1
+        }`,
+      );
+      const data = await response.json();
+      if (data.isQualified) {
+        fetchQuestions();
+      } else {
+        Alert.alert(
+          'Qualification Status',
+          'Sorry, you did not qualify for the previous round.',
+          [{text: 'OK', onPress: () => navigation.goBack()}],
+        );
+      }
+    };
+
     const fetchQuestions = async () => {
       const storedCompetitionId = await AsyncStorage.getItem('competitionId');
       if (!storedCompetitionId) {
@@ -64,7 +107,7 @@ const MCQScreen = () => {
       }
     };
 
-    fetchQuestions();
+    checkQualificationStatus();
   }, [competitionRoundId]);
 
   const handleOptionSelect = (questionId, optionId) => {
@@ -110,7 +153,7 @@ const MCQScreen = () => {
           competitionId,
           competitionRoundId,
           questionId: q.id,
-          teamId: 1,
+          teamId,
           answer: sel?.option || 'Skipped',
           score: sel?.isCorrect ? 10 : 0,
           submissionTime: new Date().toISOString(),
@@ -120,13 +163,14 @@ const MCQScreen = () => {
           competitionId,
           competitionRoundId,
           questionId: q.id,
-          teamId: 1,
+          teamId,
           answer: ans && ans.trim() !== '' ? ans : 'Skipped',
           score: 0,
           submissionTime: new Date().toISOString(),
         };
       }
     });
+    console.log('Payload:', payload);
 
     try {
       const res = await fetch(
@@ -140,6 +184,8 @@ const MCQScreen = () => {
       if (res.ok) {
         setSubmitted(true);
         setShowReview(true);
+        const qualified = payload.every(answer => answer.score >= 10);
+        setQualificationStatus(qualified ? 'Qualified' : 'Not Qualified');
         Alert.alert('Submitted', 'Your answers have been submitted!');
       } else {
         Alert.alert('Error', 'Submission failed');
@@ -172,7 +218,6 @@ const MCQScreen = () => {
             q.type === 2
               ? q.options.find(o => o.id === answers[q.id])?.option || 'Skipped'
               : answers[q.id] || 'Skipped';
-
           const correctAnswer =
             q.type === 2
               ? q.options
@@ -180,7 +225,6 @@ const MCQScreen = () => {
                   .map(o => o.option)
                   .join(', ')
               : 'N/A';
-
           return (
             <View key={q.id} style={styles.reviewBox}>
               <Text style={styles.questionText}>
@@ -195,6 +239,11 @@ const MCQScreen = () => {
             </View>
           );
         })}
+        {qualificationStatus && (
+          <Text style={styles.qualificationStatus}>
+            Qualification Status: {qualificationStatus}
+          </Text>
+        )}
       </ScrollView>
     );
   }
@@ -207,7 +256,6 @@ const MCQScreen = () => {
           Question {currentIndex + 1}/{questions.length}
         </Text>
       </View>
-
       <View style={styles.progressBar}>
         <View
           style={[
@@ -216,9 +264,7 @@ const MCQScreen = () => {
           ]}
         />
       </View>
-
       <Text style={styles.questionText}>{currentQuestion.text}</Text>
-
       {currentQuestion.type === 2 ? (
         <FlatList
           data={currentQuestion.options}
@@ -243,7 +289,6 @@ const MCQScreen = () => {
           onChangeText={text => handleInputChange(currentQuestion.id, text)}
         />
       )}
-
       <View style={styles.navRow}>
         {currentIndex > 0 && (
           <TouchableOpacity style={styles.navButton} onPress={handlePrevious}>
@@ -292,45 +337,40 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   progressBar: {
-    height: 6,
-    backgroundColor: '#333',
-    borderRadius: 3,
+    height: 8,
+    backgroundColor: '#ccc',
+    borderRadius: 5,
+    marginBottom: 12,
     overflow: 'hidden',
-    marginVertical: 12,
   },
   progressFill: {
-    height: 6,
+    height: '100%',
     backgroundColor: '#FFD700',
   },
   questionText: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '600',
     marginBottom: 16,
   },
   option: {
-    backgroundColor: '#1f1f1f',
+    backgroundColor: '#333',
     padding: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#444',
-    marginBottom: 10,
+    marginVertical: 5,
+    borderRadius: 5,
   },
   selectedOption: {
-    backgroundColor: '#2a2a2a',
-    borderColor: '#FFD700',
+    backgroundColor: '#FFD700',
   },
   optionText: {
     color: '#fff',
+    fontSize: 16,
   },
   input: {
-    backgroundColor: '#1f1f1f',
-    color: '#fff',
+    backgroundColor: '#333',
     padding: 12,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#444',
-    marginBottom: 20,
+    borderRadius: 5,
+    color: '#fff',
+    marginBottom: 16,
   },
   navRow: {
     flexDirection: 'row',
@@ -338,25 +378,29 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   navButton: {
-    flex: 1,
     backgroundColor: '#FFD700',
     padding: 12,
-    borderRadius: 6,
-    alignItems: 'center',
-    marginHorizontal: 4,
+    borderRadius: 5,
   },
   navText: {
     color: '#000',
     fontWeight: 'bold',
   },
   reviewBox: {
-    backgroundColor: '#1f1f1f',
+    backgroundColor: '#222',
     padding: 12,
-    borderRadius: 6,
+    borderRadius: 5,
     marginBottom: 12,
   },
   reviewText: {
-    color: '#fff',
+    color: '#ccc',
     marginTop: 4,
+  },
+  qualificationStatus: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginTop: 20,
   },
 });

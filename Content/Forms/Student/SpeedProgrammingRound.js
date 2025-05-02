@@ -9,67 +9,136 @@ import {
   TextInput,
   Alert,
   ScrollView,
+  UIManager,
+  Platform,
 } from 'react-native';
 import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useRoute} from '@react-navigation/native';
+import {useRoute, useNavigation} from '@react-navigation/native';
 
 const SpeedProgrammingScreen = () => {
+  const navigation = useNavigation();
   const [questions, setQuestions] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [loading, setLoading] = useState(true);
   const [timer, setTimer] = useState(60);
   const [showReview, setShowReview] = useState(false);
+  const [isQualified, setIsQualified] = useState(null);
   const timerRef = useRef(null);
   const route = useRoute();
   const {roundId} = route.params || {};
   const competitionRoundId = roundId || 1;
+  const [teamId, setTeamId] = useState(null);
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      const storedCompetitionId = await AsyncStorage.getItem('competitionId');
-      if (!storedCompetitionId) {
-        Alert.alert('Error', 'Competition ID not found in storage.');
-        return;
-      }
-
+    const initialize = async () => {
       try {
-        const res = await fetch(
-          `${Config.BASE_URL}/api/CompetitionRoundQuestion/GetCompetitionRoundQuestion?competitionRoundId=${competitionRoundId}`,
-        );
-        const questionList = await res.json();
-
-        const fetchedQuestions = await Promise.all(
-          questionList.map(async q => {
-            const qRes = await fetch(
-              `${Config.BASE_URL}/api/Questions/GetQuestionById/${q.questionId}`,
-            );
-            const qData = await qRes.json();
-
-            if (qData.type === 2) {
-              const optRes = await fetch(
-                `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${q.questionId}`,
-              );
-              const options = await optRes.json();
-              return {...qData, options};
-            } else {
-              return qData;
-            }
-          }),
-        );
-
-        setQuestions(fetchedQuestions.filter(q => q != null));
-      } catch (error) {
-        console.error(error);
-        Alert.alert('Error', 'Failed to fetch questions');
-      } finally {
-        setLoading(false);
+        const storedTeamId = await AsyncStorage.getItem('teamId');
+        console.log('Stored Team ID:', storedTeamId);
+        if (!storedTeamId) {
+          Alert.alert('Error', 'Team ID not found.');
+          return;
+        }
+        setTeamId(parseInt(storedTeamId, 10));
+      } catch (err) {
+        console.error(err);
+        Alert.alert('Error', 'Failed to retrieve team ID.');
       }
     };
 
-    fetchQuestions();
-  }, [competitionRoundId]);
+    initialize();
+  }, []);
+
+  useEffect(() => {
+    if (teamId !== null) {
+      if (competitionRoundId <= 1) {
+        setIsQualified(true);
+        fetchQuestions();
+      } else {
+        checkQualificationStatus(); // Call only after teamId is set
+      }
+    }
+  }, [teamId, competitionRoundId]);
+
+  const checkQualificationStatus = async () => {
+    if (competitionRoundId <= 1) {
+      setIsQualified(true);
+      fetchQuestions();
+    } else {
+      console.log(
+        'Checking url status...',
+        `${
+          Config.BASE_URL
+        }/api/RoundResult/CheckQualificationStatus/${teamId}/${
+          competitionRoundId - 1
+        }`,
+      );
+      const url = `${
+        Config.BASE_URL
+      }/api/RoundResult/CheckQualificationStatus/${teamId}/${
+        competitionRoundId - 1
+      }`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.isQualified) {
+          setIsQualified(true);
+          fetchQuestions();
+        } else {
+          setIsQualified(false);
+          Alert.alert(
+            'Qualification Status',
+            'Sorry, you did not qualify for the previous round.',
+            [{text: 'OK', onPress: () => navigation.goBack()}],
+          );
+        }
+      } catch (error) {
+        console.error('Error checking qualification status:', error);
+        Alert.alert('Error', 'Failed to check qualification status.');
+      }
+    }
+  };
+
+  const fetchQuestions = async () => {
+    const storedCompetitionId = await AsyncStorage.getItem('competitionId');
+    if (!storedCompetitionId) {
+      Alert.alert('Error', 'Competition ID not found in storage.');
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${Config.BASE_URL}/api/CompetitionRoundQuestion/GetCompetitionRoundQuestion?competitionRoundId=${competitionRoundId}`,
+      );
+      const questionList = await res.json();
+
+      const fetchedQuestions = await Promise.all(
+        questionList.map(async q => {
+          const qRes = await fetch(
+            `${Config.BASE_URL}/api/Questions/GetQuestionById/${q.questionId}`,
+          );
+          const qData = await qRes.json();
+          if (qData.type === 2) {
+            const optRes = await fetch(
+              `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${q.questionId}`,
+            );
+            const options = await optRes.json();
+            return {...qData, options};
+          } else {
+            return qData;
+          }
+        }),
+      );
+
+      setQuestions(fetchedQuestions.filter(q => q != null));
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'Failed to fetch questions');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     setTimer(30);
@@ -117,7 +186,7 @@ const SpeedProgrammingScreen = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      setShowReview(true); // review before submit
+      setShowReview(true);
     }
   };
 
@@ -132,13 +201,12 @@ const SpeedProgrammingScreen = () => {
         competitionId,
         competitionRoundId,
         questionId: q.id,
-        teamId: 1,
+        teamId,
         answer: answer?.toString() || '',
         score: 0,
         submissionTime: new Date().toISOString(),
       });
     }
-    console.log('Attempted Questions:', attemptedQuestions);
 
     try {
       const response = await fetch(
@@ -314,22 +382,21 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#FFD700',
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 10,
+    marginTop: 20,
   },
   buttonText: {
+    textAlign: 'center',
     color: '#000',
     fontWeight: 'bold',
-    fontSize: 16,
   },
   reviewBox: {
+    padding: 16,
     backgroundColor: '#1f1f1f',
-    padding: 15,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#333',
     marginBottom: 10,
+    borderColor: '#444',
+    borderWidth: 1,
   },
 });

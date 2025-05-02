@@ -26,5 +26,8 @@ import RoundsScreen from './Content/Forms/Student/CompetitonRounds';
 import MCQScreen from './Content/Forms/Student/McqRound';
 import CheckTaskscreen from './Content/Forms/Expert/CheckTask';
 import SubmittedTaskScreen from './Content/Forms/Expert/CheckAttemptedTaskQuestion';
+import ExpertLeadearBoard from './Content/Forms/Expert/ExpertLeaderboard';
+import ExpertLeadearBoardRoundScreen from './Content/Forms/Expert/ExpertLeaderBoardRounds';
+import ExpertLeaderboardResultScreen from './Content/Forms/Expert/ExpertLeadearBoardResult';
 
 AppRegistry.registerComponent(appName, () => Navigation);

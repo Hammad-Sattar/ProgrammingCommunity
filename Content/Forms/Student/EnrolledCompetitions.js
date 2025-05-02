@@ -17,6 +17,7 @@ const EnrolledCompetitionsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [userId, setUserId] = useState(null);
+  const [teamId, setTeamId] = useState(null); // State to hold teamId
 
   useEffect(() => {
     const fetchUserId = async () => {
@@ -29,6 +30,7 @@ const EnrolledCompetitionsScreen = () => {
   useEffect(() => {
     if (userId) {
       fetchCompetitions();
+      fetchTeamId(userId);
     }
   }, [userId]);
 
@@ -49,6 +51,29 @@ const EnrolledCompetitionsScreen = () => {
         setError('Error loading competitions');
         setLoading(false);
       });
+  };
+
+  const fetchTeamId = async userId => {
+    try {
+      const response = await fetch(
+        `${Config.BASE_URL}/api/Team/GetTeamIdByUserId/${userId}`,
+      );
+      if (!response.ok) throw new Error('Failed to fetch team ID');
+
+      const data = await response.json();
+      console.log('Team ID response:', data);
+
+      if (data && typeof data.teamId !== 'undefined' && data.teamId !== null) {
+        const teamId = data.teamId;
+
+        await AsyncStorage.setItem('teamId', teamId.toString());
+        console.log('teamId saved:', teamId);
+      } else {
+        console.log('Invalid teamId in response:', data);
+      }
+    } catch (err) {
+      console.error('Error fetching/saving team ID:', err);
+    }
   };
 
   const renderItem = ({item}) => (

@@ -1,5 +1,3 @@
-// ShuffleRoundScreen.js
-
 import React, {useEffect, useState} from 'react';
 import {
   View,
@@ -27,18 +25,60 @@ const ShuffleRoundScreen = () => {
   const [showSubmit, setShowSubmit] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [answers, setAnswers] = useState([]);
+  const [isQualified, setIsQualified] = useState(null); // Add state for qualification status
+  const [teamId, setTeamId] = useState(null); // Added state for teamId
   const route = useRoute();
   const competitionRoundId = route.params?.roundId ?? 1;
 
   useEffect(() => {
+    const fetchTeamId = async () => {
+      const savedTeamId = await AsyncStorage.getItem('teamId');
+      if (savedTeamId) {
+        setTeamId(savedTeamId); // Store teamId in the state
+      } else {
+        Alert.alert('Error', 'Team ID not found.');
+      }
+    };
+
     if (
       Platform.OS === 'android' &&
       UIManager.setLayoutAnimationEnabledExperimental
     ) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
     }
-    loadQuestions();
-  }, [competitionRoundId]);
+    fetchTeamId();
+  }, []);
+
+  useEffect(() => {
+    if (teamId && competitionRoundId) {
+      loadQualificationStatus();
+    }
+  }, [teamId, competitionRoundId]);
+
+  const loadQualificationStatus = async () => {
+    if (competitionRoundId <= 1) {
+      setIsQualified(true); // No previous round to check
+      loadQuestions();
+      return;
+    }
+    const response = await fetch(
+      `${Config.BASE_URL}/api/RoundResult/CheckQualificationStatus/${teamId}/${
+        competitionRoundId - 1
+      }`,
+    );
+    const data = await response.json();
+    if (data.isQualified) {
+      setIsQualified(true);
+      loadQuestions();
+    } else {
+      setIsQualified(false);
+      Alert.alert(
+        'Qualification Status',
+        'Sorry, you did not qualify for the previous round.',
+        [{text: 'OK'}],
+      );
+    }
+  };
 
   const loadQuestions = async () => {
     setLoading(true);
@@ -107,7 +147,7 @@ const ShuffleRoundScreen = () => {
     if (ni < questions.length) {
       setCurrentIndex(ni);
       prepare(questions[ni].text);
-      setShowSubmit(ni === questions.length - 1); // Show submit only on the last question
+      setShowSubmit(ni === questions.length - 1);
     }
   };
 
@@ -117,7 +157,7 @@ const ShuffleRoundScreen = () => {
     if (pi >= 0) {
       setCurrentIndex(pi);
       prepare(questions[pi].text);
-      setShowSubmit(pi === questions.length - 1); // Show submit only on the last question
+      setShowSubmit(pi === questions.length - 1);
     }
   };
 
@@ -140,7 +180,7 @@ const ShuffleRoundScreen = () => {
               competitionId: compId,
               competitionRoundId,
               questionId: a.questionId,
-              teamId: 1,
+              teamId: teamId,
               answer: a.answer,
               score: a.isCorrect ? 10 : 0,
               submissionTime: new Date().toISOString(),
@@ -165,10 +205,20 @@ const ShuffleRoundScreen = () => {
     );
   };
 
-  if (loading) {
+  if (loading || isQualified === null) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color="#FFD700" />
+      </View>
+    );
+  }
+
+  if (!isQualified) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.header}>
+          You did not qualify for the previous round.
+        </Text>
       </View>
     );
   }
@@ -316,21 +366,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
     padding: 12,
     borderRadius: 6,
-    alignItems: 'center',
-    marginHorizontal: 4,
+    marginHorizontal: 8,
   },
-  btnText: {color: '#000', fontWeight: 'bold'},
+  btnText: {color: '#121212', textAlign: 'center', fontSize: 16},
   reviewBox: {
-    backgroundColor: '#1f1f1f',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 12,
+    backgroundColor: '#222',
+    padding: 16,
+    marginVertical: 8,
+    borderRadius: 8,
   },
-  questionLabel: {color: '#FFD700', fontWeight: 'bold', marginBottom: 4},
-  answerLabel: {color: '#fff', marginTop: 4},
+  questionLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginBottom: 8,
+  },
   codeLine: {
+    fontFamily: 'Courier New',
     color: '#fff',
-    fontFamily: 'monospace',
-    marginLeft: 8,
+  },
+  answerLabel: {
+    marginTop: 8,
+    color: '#FFD700',
   },
 });

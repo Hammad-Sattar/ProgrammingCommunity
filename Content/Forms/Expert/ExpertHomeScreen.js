@@ -71,7 +71,9 @@ const ExpertHome = ({navigation}) => {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.cardLarge}>
+      <TouchableOpacity
+        style={styles.cardLarge}
+        onPress={() => navigation.navigate('ExpertLeadearBoard')}>
         <Text style={styles.cardLargeText}>▲ Student Leaderboard</Text>
       </TouchableOpacity>
 
