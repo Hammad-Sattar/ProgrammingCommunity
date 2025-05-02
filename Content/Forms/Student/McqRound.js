@@ -187,6 +187,31 @@ const MCQScreen = () => {
         const qualified = payload.every(answer => answer.score >= 10);
         setQualificationStatus(qualified ? 'Qualified' : 'Not Qualified');
         Alert.alert('Submitted', 'Your answers have been submitted!');
+
+        // Call the RoundResult API after successful submission
+        const roundResultPayload = {
+          competitionRoundId,
+          teamId,
+          totalScore: payload.reduce(
+            (total, answer) => total + answer.score,
+            0,
+          ),
+        };
+
+        const roundResultRes = await fetch(
+          `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+          {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(roundResultPayload),
+          },
+        );
+
+        if (roundResultRes.ok) {
+          console.log('Round results inserted successfully.');
+        } else {
+          console.error('Failed to insert round results');
+        }
       } else {
         Alert.alert('Error', 'Submission failed');
       }

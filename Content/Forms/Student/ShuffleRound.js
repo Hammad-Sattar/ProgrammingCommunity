@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {useRoute} from '@react-navigation/native';
+import {useRoute, useNavigation} from '@react-navigation/native';
 
 const ShuffleRoundScreen = () => {
   const [questions, setQuestions] = useState([]);
@@ -25,9 +25,10 @@ const ShuffleRoundScreen = () => {
   const [showSubmit, setShowSubmit] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [answers, setAnswers] = useState([]);
-  const [isQualified, setIsQualified] = useState(null); // Add state for qualification status
+  const [isQualified, setIsQualified] = useState(null);
   const [teamId, setTeamId] = useState(null); // Added state for teamId
   const route = useRoute();
+  const navigation = useNavigation();
   const competitionRoundId = route.params?.roundId ?? 1;
 
   useEffect(() => {
@@ -185,6 +186,7 @@ const ShuffleRoundScreen = () => {
               score: a.isCorrect ? 10 : 0,
               submissionTime: new Date().toISOString(),
             }));
+
             try {
               const res = await fetch(
                 `${Config.BASE_URL}/api/CompetitionAttemptedQuestion/AddCompetitionAttemptedQuestion`,
@@ -194,8 +196,36 @@ const ShuffleRoundScreen = () => {
                   body: JSON.stringify(payload),
                 },
               );
-              if (res.ok) setReviewMode(true);
-              else Alert.alert('Error', 'Submission failed');
+
+              if (res.ok) {
+                setReviewMode(true);
+
+                const roundResultPayload = {
+                  competitionRoundId,
+                  teamId,
+                  totalScore: payload.reduce(
+                    (total, answer) => total + answer.score,
+                    0,
+                  ),
+                };
+
+                const roundResultRes = await fetch(
+                  `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+                  {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(roundResultPayload),
+                  },
+                );
+
+                if (roundResultRes.ok) {
+                  console.log('Round results inserted successfully.');
+                } else {
+                  console.error('Failed to insert round results');
+                }
+              } else {
+                Alert.alert('Error', 'Submission failed');
+              }
             } catch {
               Alert.alert('Error', 'Failed to submit');
             }
@@ -203,6 +233,7 @@ const ShuffleRoundScreen = () => {
         },
       ],
     );
+    navigation.goBack();
   };
 
   if (loading || isQualified === null) {

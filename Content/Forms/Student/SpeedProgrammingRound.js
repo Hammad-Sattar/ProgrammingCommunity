@@ -219,8 +219,28 @@ const SpeedProgrammingScreen = () => {
       );
 
       if (response.ok) {
-        Alert.alert('Submitted', 'Your answers have been submitted!');
-        setShowReview(false);
+        const res = await fetch(
+          `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+          {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              competitionId,
+              competitionRoundId,
+              teamId,
+            }),
+          },
+        );
+
+        if (res.ok) {
+          Alert.alert(
+            'Submitted',
+            'Your answers have been submitted and round results recorded!',
+          );
+          setShowReview(false);
+        } else {
+          Alert.alert('Error', 'Failed to submit round results');
+        }
       } else {
         Alert.alert('Error', 'Submission failed');
       }
@@ -228,6 +248,7 @@ const SpeedProgrammingScreen = () => {
       console.error(err);
       Alert.alert('Error', 'Submission error');
     }
+    navigation.goBack();
   };
 
   if (loading) {
