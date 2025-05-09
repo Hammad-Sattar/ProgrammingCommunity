@@ -25,7 +25,7 @@ const StudentHome = ({navigation}) => {
         title="Student Leaderboard"
         subtitle=""
         isLeaderboard
-        onPress={() => navigation.navigate('LeaderboardScreen')}
+        onPress={() => navigation.navigate('StudentLeadearBoard')}
       />
 
       <Text style={styles.sectionTitle}>Upcoming Tasks</Text>

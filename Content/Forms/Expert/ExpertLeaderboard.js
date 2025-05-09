@@ -11,7 +11,7 @@ import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {useNavigation} from '@react-navigation/native';
 
-const EnrolledCompetitionsScreen = () => {
+const ExpertLeadearBoard = () => {
   const navigation = useNavigation();
   const [competitions, setCompetitions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +110,7 @@ const EnrolledCompetitionsScreen = () => {
   );
 };
 
-export default EnrolledCompetitionsScreen;
+export default ExpertLeadearBoard;
 
 const styles = StyleSheet.create({
   container: {

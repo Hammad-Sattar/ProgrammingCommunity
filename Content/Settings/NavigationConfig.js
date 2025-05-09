@@ -28,6 +28,9 @@ import CheckAttemptedTaskQuestion from '../Forms/Expert/CheckAttemptedTaskQuesti
 import ExpertLeadearBoard from '../Forms/Expert/ExpertLeaderboard';
 import ExpertLeadearBoardRoundScreen from '../Forms/Expert/ExpertLeaderBoardRounds';
 import ExpertLeaderboardResultScreen from '../Forms/Expert/ExpertLeadearBoardResult';
+import StudentLeadearBoard from '../Forms/Student/StudentLeaderBoard';
+import StudentLeaderboardRoundScreen from '../Forms/Student/StudentLeaderBoardRounds';
+import StudentLeaderboardResultScreen from '../Forms/Student/StudentLeaderBoardResult';
 
 const Stack = createStackNavigator();
 
@@ -98,6 +101,18 @@ const Navigation = () => {
         <Stack.Screen
           name="ExpertLeaderboardResult"
           component={ExpertLeaderboardResultScreen}
+        />
+        <Stack.Screen
+          name="StudentLeadearBoard"
+          component={StudentLeadearBoard}
+        />
+        <Stack.Screen
+          name="StudentLeaderboardRound"
+          component={StudentLeaderboardRoundScreen}
+        />
+        <Stack.Screen
+          name="StudentLeaderboardResult"
+          component={StudentLeaderboardResultScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>
