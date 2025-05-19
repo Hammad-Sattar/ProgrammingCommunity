@@ -31,6 +31,8 @@ import ExpertLeaderboardResultScreen from '../Forms/Expert/ExpertLeadearBoardRes
 import StudentLeadearBoard from '../Forms/Student/StudentLeaderBoard';
 import StudentLeaderboardRoundScreen from '../Forms/Student/StudentLeaderBoardRounds';
 import StudentLeaderboardResultScreen from '../Forms/Student/StudentLeaderBoardResult';
+import AttemptedSpeedProgrammingScreenQuestionsScreen from '../Forms/Expert/CheckAttemptedSpeedProgrammingQuestion';
+import ViewSpeedProgrammingScreenQuestionsScreen from '../Forms/Student/ViewAttemptedSpeedProgrammingScreenQuestionsScreen';
 
 const Stack = createStackNavigator();
 
@@ -113,6 +115,14 @@ const Navigation = () => {
         <Stack.Screen
           name="StudentLeaderboardResult"
           component={StudentLeaderboardResultScreen}
+        />
+        <Stack.Screen
+          name="AttemptedSpeedProgrammingScreenQuestionsScreen"
+          component={AttemptedSpeedProgrammingScreenQuestionsScreen}
+        />
+        <Stack.Screen
+          name="ViewAttemptedSpeedProgrammingQuestion"
+          component={ViewSpeedProgrammingScreenQuestionsScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

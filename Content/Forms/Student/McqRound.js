@@ -155,7 +155,7 @@ const MCQScreen = () => {
           questionId: q.id,
           teamId,
           answer: sel?.option || 'Skipped',
-          score: sel?.isCorrect ? 10 : 0,
+          score: sel?.isCorrect ? q.marks : 0,
           submissionTime: new Date().toISOString(),
         };
       } else {
@@ -170,7 +170,6 @@ const MCQScreen = () => {
         };
       }
     });
-    console.log('Payload:', payload);
 
     try {
       const res = await fetch(
@@ -184,18 +183,16 @@ const MCQScreen = () => {
       if (res.ok) {
         setSubmitted(true);
         setShowReview(true);
-        const qualified = payload.every(answer => answer.score >= 10);
+        const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+        const obtainedMarks = payload.reduce((sum, ans) => sum + ans.score, 0);
+        const qualified = obtainedMarks >= totalMarks * 0.5; // Example qualification criteria (60%)
         setQualificationStatus(qualified ? 'Qualified' : 'Not Qualified');
         Alert.alert('Submitted', 'Your answers have been submitted!');
 
-        // Call the RoundResult API after successful submission
         const roundResultPayload = {
           competitionRoundId,
           teamId,
-          totalScore: payload.reduce(
-            (total, answer) => total + answer.score,
-            0,
-          ),
+          totalScore: obtainedMarks,
         };
 
         const roundResultRes = await fetch(
@@ -238,11 +235,13 @@ const MCQScreen = () => {
         <Text style={styles.headerTitle}>
           {submitted ? '📝 Results' : '📝 Review Your Answers'}
         </Text>
+
         {questions.map((q, i) => {
           const yourAnswer =
             q.type === 2
               ? q.options.find(o => o.id === answers[q.id])?.option || 'Skipped'
               : answers[q.id] || 'Skipped';
+
           const correctAnswer =
             q.type === 2
               ? q.options
@@ -250,29 +249,78 @@ const MCQScreen = () => {
                   .map(o => o.option)
                   .join(', ')
               : 'N/A';
+
+          let isCorrect = false;
+          let obtainedMarks = 0;
+          if (q.type === 2) {
+            const selectedOption = q.options.find(o => o.id === answers[q.id]);
+            isCorrect = selectedOption?.isCorrect || false;
+            obtainedMarks = isCorrect ? q.marks : 0;
+          }
+
           return (
             <View key={q.id} style={styles.reviewBox}>
               <Text style={styles.questionText}>
-                Q{i + 1}: {q.text}
+                Q{i + 1} ({q.marks} marks): {q.text}
               </Text>
-              <Text style={styles.reviewText}>Your Answer: {yourAnswer}</Text>
-              {submitted && (
-                <Text style={styles.reviewText}>
-                  Correct Answer: {correctAnswer}
+
+              <View style={styles.answerContainer}>
+                <Text
+                  style={[
+                    styles.reviewText,
+                    submitted && isCorrect && styles.correctAnswer,
+                    submitted && !isCorrect && styles.wrongAnswer,
+                  ]}>
+                  Your Answer: {yourAnswer}
+                  {submitted && (isCorrect ? ' ✓' : ' ✗')}
                 </Text>
-              )}
+
+                {submitted && (
+                  <>
+                    <Text style={styles.reviewText}>
+                      Correct Answer: {correctAnswer}
+                    </Text>
+                    <Text style={styles.marksText}>
+                      Marks: {obtainedMarks}/{q.marks}
+                    </Text>
+                  </>
+                )}
+
+                {submitted && !isCorrect && (
+                  <TouchableOpacity style={styles.challengeButton}>
+                    <Text style={styles.challengeButtonText}>
+                      Challenge Answer
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           );
         })}
+
         {qualificationStatus && (
-          <Text style={styles.qualificationStatus}>
-            Qualification Status: {qualificationStatus}
-          </Text>
+          <View style={styles.scoreContainer}>
+            <Text style={styles.scoreText}>
+              Total Obtained:{' '}
+              {questions.reduce((total, q) => {
+                if (q.type === 2) {
+                  const selectedOption = q.options.find(
+                    o => o.id === answers[q.id],
+                  );
+                  return total + (selectedOption?.isCorrect ? q.marks : 0);
+                }
+                return total;
+              }, 0)}
+              /{questions.reduce((total, q) => total + q.marks, 0)}
+            </Text>
+            <Text style={styles.qualificationStatus}>
+              Qualification Status: {qualificationStatus}
+            </Text>
+          </View>
         )}
       </ScrollView>
     );
   }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -289,7 +337,11 @@ const MCQScreen = () => {
           ]}
         />
       </View>
+      <Text style={styles.questionText}>
+        Question {currentIndex + 1} ({currentQuestion.marks} marks){' '}
+      </Text>
       <Text style={styles.questionText}>{currentQuestion.text}</Text>
+
       {currentQuestion.type === 2 ? (
         <FlatList
           data={currentQuestion.options}
@@ -341,6 +393,58 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
     padding: 16,
+  },
+
+  reviewBox: {
+    backgroundColor: '#222',
+    padding: 12,
+    borderRadius: 5,
+    marginBottom: 12,
+  },
+  answerContainer: {
+    marginTop: 8,
+  },
+  correctAnswer: {
+    color: '#4CAF50',
+    fontWeight: 'bold',
+  },
+  wrongAnswer: {
+    color: '#F44336',
+    fontWeight: 'bold',
+  },
+  marksText: {
+    color: '#FFD700',
+    marginTop: 4,
+  },
+  scoreContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: '#333',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  scoreText: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  qualificationStatus: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  challengeButton: {
+    backgroundColor: '#F44336',
+    padding: 8,
+    borderRadius: 5,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  challengeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   loading: {
     flex: 1,

@@ -10,7 +10,6 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
-  ToastAndroid,
 } from 'react-native';
 import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,7 +25,7 @@ const ShuffleRoundScreen = () => {
   const [reviewMode, setReviewMode] = useState(false);
   const [answers, setAnswers] = useState([]);
   const [isQualified, setIsQualified] = useState(null);
-  const [teamId, setTeamId] = useState(null); // Added state for teamId
+  const [teamId, setTeamId] = useState(null);
   const route = useRoute();
   const navigation = useNavigation();
   const competitionRoundId = route.params?.roundId ?? 1;
@@ -35,7 +34,7 @@ const ShuffleRoundScreen = () => {
     const fetchTeamId = async () => {
       const savedTeamId = await AsyncStorage.getItem('teamId');
       if (savedTeamId) {
-        setTeamId(savedTeamId); // Store teamId in the state
+        setTeamId(savedTeamId);
       } else {
         Alert.alert('Error', 'Team ID not found.');
       }
@@ -58,7 +57,7 @@ const ShuffleRoundScreen = () => {
 
   const loadQualificationStatus = async () => {
     if (competitionRoundId <= 1) {
-      setIsQualified(true); // No previous round to check
+      setIsQualified(true);
       loadQuestions();
       return;
     }
@@ -136,9 +135,13 @@ const ShuffleRoundScreen = () => {
     const answerText = tiles.map(t => t.text).join('\n');
     const correctText = correct.map(t => t.text).join('\n');
     const isCorrect = answerText === correctText;
-    const newAnswer = {questionId: q.id, answer: answerText, isCorrect};
+    const newAnswer = {
+      questionId: q.id,
+      answer: answerText,
+      isCorrect,
+      marks: q.marks, // Store question marks
+    };
     setAnswers(prev => [...prev.filter(a => a.questionId !== q.id), newAnswer]);
-
     return newAnswer;
   };
 
@@ -183,7 +186,7 @@ const ShuffleRoundScreen = () => {
               questionId: a.questionId,
               teamId: teamId,
               answer: a.answer,
-              score: a.isCorrect ? 10 : 0,
+              score: a.isCorrect ? a.marks : 0, // Use question marks
               submissionTime: new Date().toISOString(),
             }));
 
@@ -218,9 +221,7 @@ const ShuffleRoundScreen = () => {
                   },
                 );
 
-                if (roundResultRes.ok) {
-                  console.log('Round results inserted successfully.');
-                } else {
+                if (!roundResultRes.ok) {
                   console.error('Failed to insert round results');
                 }
               } else {
@@ -233,7 +234,6 @@ const ShuffleRoundScreen = () => {
         },
       ],
     );
-    navigation.goBack();
   };
 
   if (loading || isQualified === null) {
@@ -255,32 +255,72 @@ const ShuffleRoundScreen = () => {
   }
 
   if (reviewMode) {
+    const totalMarks = questions.reduce((sum, q) => sum + q.marks, 0);
+    const obtainedMarks = answers.reduce(
+      (sum, a) => sum + (a.isCorrect ? a.marks : 0),
+      0,
+    );
+    const qualificationStatus =
+      obtainedMarks >= totalMarks * 0.5 ? 'Qualified' : 'Not Qualified'; // 50% criteria
+
     return (
       <ScrollView style={styles.container}>
-        <Text style={styles.header}>Review Your Answers</Text>
+        <Text style={styles.header}>📝 Review Your Answers</Text>
+
         {answers.map(a => {
           const q = questions.find(x => x.id === a.questionId);
           const codeLines = q.text.split('//n').filter(l => l.trim());
+
           return (
             <View key={q.id} style={styles.reviewBox}>
-              <Text style={styles.questionLabel}>Original:</Text>
+              <Text style={styles.questionLabel}>
+                Question ({q.marks} marks)
+              </Text>
+              <Text style={styles.questionLabel}>Original Code:</Text>
               {codeLines.map((l, i) => (
                 <Text key={i} style={styles.codeLine}>
                   {l.trim()}
                 </Text>
               ))}
-              <Text style={styles.questionLabel}>Your Order:</Text>
+
+              <Text style={styles.questionLabel}>Your Arrangement:</Text>
               {a.answer.split('\n').map((l, i) => (
                 <Text key={i} style={styles.codeLine}>
                   {l}
                 </Text>
               ))}
-              <Text style={styles.answerLabel}>
-                {a.isCorrect ? '✔ Correct' : '✘ Incorrect'}
+
+              <Text
+                style={[
+                  styles.answerStatus,
+                  a.isCorrect ? styles.correctAnswer : styles.wrongAnswer,
+                ]}>
+                {a.isCorrect
+                  ? `✓ Correct (${q.marks}/${q.marks})`
+                  : `✗ Incorrect (0/${q.marks})`}
               </Text>
+
+              {!a.isCorrect && (
+                <TouchableOpacity
+                  style={styles.challengeButton}
+                  onPress={() => handleChallenge(q.id)}>
+                  <Text style={styles.challengeButtonText}>
+                    Challenge This Answer
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           );
         })}
+
+        <View style={styles.scoreSummary}>
+          <Text style={styles.summaryText}>
+            Obtained Marks: {obtainedMarks}/{totalMarks}
+          </Text>
+          <Text style={styles.summaryText}>
+            Qualification Status: {qualificationStatus}
+          </Text>
+        </View>
       </ScrollView>
     );
   }
@@ -289,9 +329,12 @@ const ShuffleRoundScreen = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <Text style={styles.header}>
-        Shuffle Round — Q{currentIndex + 1}/{questions.length}
-      </Text>
+      {q && (
+        <Text style={styles.header}>
+          Shuffle Round — Q{currentIndex + 1}/{questions.length} ({q.marks}{' '}
+          marks)
+        </Text>
+      )}
       <View style={styles.progressBarContainer}>
         <View
           style={[
@@ -339,8 +382,6 @@ const ShuffleRoundScreen = () => {
     </ScrollView>
   );
 };
-
-export default ShuffleRoundScreen;
 
 const styles = StyleSheet.create({
   container: {flex: 1, backgroundColor: '#121212', padding: 16},
@@ -405,6 +446,8 @@ const styles = StyleSheet.create({
     padding: 16,
     marginVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   questionLabel: {
     fontSize: 16,
@@ -415,9 +458,46 @@ const styles = StyleSheet.create({
   codeLine: {
     fontFamily: 'Courier New',
     color: '#fff',
+    marginVertical: 2,
+    backgroundColor: '#1a1a1a',
+    padding: 8,
+    borderRadius: 4,
   },
-  answerLabel: {
-    marginTop: 8,
+  answerStatus: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  correctAnswer: {
+    color: '#4CAF50',
+  },
+  wrongAnswer: {
+    color: '#F44336',
+  },
+  challengeButton: {
+    backgroundColor: '#F44336',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+    alignItems: 'center',
+  },
+  challengeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  scoreSummary: {
+    backgroundColor: '#333',
+    padding: 20,
+    borderRadius: 10,
+    margin: 16,
+    alignItems: 'center',
+  },
+  summaryText: {
     color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginVertical: 5,
   },
 });
+
+export default ShuffleRoundScreen;

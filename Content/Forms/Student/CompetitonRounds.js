@@ -81,6 +81,12 @@ const RoundsScreen = () => {
     }
   };
 
+  const handleViewResults = roundId => {
+    navigation.navigate('ViewAttemptedSpeedProgrammingQuestion', {
+      roundId,
+    });
+  };
+
   const renderItem = ({item}) => {
     const info = typeMap[item.roundType] || {
       title: `Round ${item.roundNumber}`,
@@ -106,13 +112,24 @@ const RoundsScreen = () => {
           <Icon name="lock" size={20} color="#888" style={styles.lockIcon} />
         )}
 
-        {true && (
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => handleStartRound(item.roundType, item.id)}>
-            <Text style={styles.buttonText}>Start</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.buttonContainer}>
+          {true && (
+            <TouchableOpacity
+              style={[styles.button, styles.startButton]}
+              onPress={() => handleStartRound(item.roundType, item.id)}>
+              <Text style={styles.buttonText}>Start</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Add View Results button only for Speed Round (type 2) */}
+          {item.roundType === 2 && (
+            <TouchableOpacity
+              style={[styles.button, styles.resultsButton]}
+              onPress={() => handleViewResults(item.id)}>
+              <Text style={styles.buttonText}>View Results</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -194,12 +211,23 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 8,
+  },
   button: {
-    backgroundColor: '#FFD700',
+    flex: 1,
     paddingVertical: 10,
     borderRadius: 6,
-    marginTop: 10,
     alignItems: 'center',
+  },
+  startButton: {
+    backgroundColor: '#FFD700',
+  },
+  resultsButton: {
+    backgroundColor: '#4CAF50',
   },
   buttonText: {
     color: '#000',

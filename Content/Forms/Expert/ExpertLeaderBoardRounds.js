@@ -57,10 +57,17 @@ const ExpertLeaderboardRoundScreen = ({route, navigation}) => {
     })();
   }, [competitionId]);
 
-  // ✅ Function to handle navigation to leaderboard result screen
   const handleNavigateToResults = roundId => {
     console.log(`Navigating to results for round ID: ${roundId}`);
     navigation.navigate('ExpertLeaderboardResult', {roundId});
+  };
+
+  // ✅ New function to handle navigation to questions screen
+  const handleNavigateToQuestions = roundId => {
+    console.log(`Navigating to questions for round ID: ${roundId}`);
+    navigation.navigate('AttemptedSpeedProgrammingScreenQuestionsScreen', {
+      roundId,
+    });
   };
 
   const renderItem = ({item}) => {
@@ -90,11 +97,24 @@ const ExpertLeaderboardRoundScreen = ({route, navigation}) => {
           <Icon name="lock" size={20} color="#888" style={styles.lockIcon} />
         )}
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => handleNavigateToResults(item.id)}>
-          <Text style={styles.buttonText}>See Results</Text>
-        </TouchableOpacity>
+        {/* Button container */}
+        <View style={styles.buttonContainer}>
+          {/* Always show See Results button */}
+          <TouchableOpacity
+            style={[styles.button, styles.resultsButton]}
+            onPress={() => handleNavigateToResults(item.id)}>
+            <Text style={styles.buttonText}>See Results</Text>
+          </TouchableOpacity>
+
+          {/* Show Check Questions button only for Speed Round (type 2) */}
+          {item.roundType === 2 && (
+            <TouchableOpacity
+              style={[styles.button, styles.questionsButton]}
+              onPress={() => handleNavigateToQuestions(item.id)}>
+              <Text style={styles.buttonText}>Check Questions</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -175,12 +195,23 @@ const styles = StyleSheet.create({
     top: 12,
     right: 12,
   },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    gap: 8,
+  },
   button: {
-    backgroundColor: '#FFD700',
+    flex: 1,
     paddingVertical: 10,
     borderRadius: 6,
-    marginTop: 10,
     alignItems: 'center',
+  },
+  resultsButton: {
+    backgroundColor: '#FFD700',
+  },
+  questionsButton: {
+    backgroundColor: '#4CAF50',
   },
   buttonText: {
     color: '#000',

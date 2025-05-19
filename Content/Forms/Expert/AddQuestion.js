@@ -22,6 +22,7 @@ const AddQuestions = () => {
   const [topic, setTopic] = useState('');
   const [type, setType] = useState('');
   const [difficulty, setDifficulty] = useState('');
+  const [marks, setMarks] = useState('');
   const [mcqOptions, setMcqOptions] = useState([{text: '', isCorrect: false}]);
   const [questionText, setQuestionText] = useState('');
   const [topics, setTopics] = useState([]);
@@ -67,7 +68,14 @@ const AddQuestions = () => {
   };
 
   const handleSave = async () => {
-    if (!subjectcode || !topic || !type || !questionText || !difficulty) {
+    if (
+      !subjectcode ||
+      !topic ||
+      !type ||
+      !questionText ||
+      !difficulty ||
+      !marks
+    ) {
       Alert.alert('Validation Error', 'Please fill all required fields.');
       return;
     }
@@ -111,6 +119,7 @@ const AddQuestions = () => {
         difficulty,
         text: questionText.trim(),
         type: parseInt(type, 10),
+        marks: parseInt(marks, 10),
         options: optionsData,
       };
 
@@ -130,11 +139,12 @@ const AddQuestions = () => {
             ? 'Question with options added successfully!'
             : 'Question added successfully!',
         );
-
+        setMarks('');
         setTopic('');
         setType('');
         setDifficulty('');
         setQuestionText('');
+
         setMcqOptions([
           {text: '', isCorrect: false},
           {text: '', isCorrect: false},
@@ -179,6 +189,17 @@ const AddQuestions = () => {
         <Picker.Item label="Easy" value="1" />
         <Picker.Item label="Medium" value="2" />
         <Picker.Item label="Hard" value="3" />
+      </Picker>
+
+      <Text style={styles.sectionTitle}>Select Marks</Text>
+      <Picker
+        selectedValue={marks}
+        style={styles.dropdown}
+        onValueChange={setMarks}>
+        <Picker.Item label="Select Marks" value="" />
+        <Picker.Item label="5" value="5" />
+        <Picker.Item label="8" value="8" />
+        <Picker.Item label="10" value="10" />
       </Picker>
 
       <Text style={styles.sectionTitle}>Question Type</Text>
