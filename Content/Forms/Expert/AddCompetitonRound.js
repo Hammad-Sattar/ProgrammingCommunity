@@ -40,6 +40,8 @@ const CompetitionRoundScreen = ({navigation, route}) => {
         filtered = filtered; // No filter applied here
       } else if (selectedType === '3') {
         filtered = filtered.filter(question => question.type === 3);
+      } else if (selectedType === '4') {
+        filtered = filtered.filter(question => question.type === 2);
       }
     }
 

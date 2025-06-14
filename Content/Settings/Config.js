@@ -1,5 +1,5 @@
 const Config = {
-  BASE_URL: 'http://192.168.18.73:8080',
+  BASE_URL: 'http://192.168.1.15:8080',
   ENDPOINTS: {
     getAllSubjects: '/api/Subject/GetAllSubjects',
     postExpertSubject: '/api/ExpertSubject/AddExpertSubject',
