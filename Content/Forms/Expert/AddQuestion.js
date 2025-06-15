@@ -18,6 +18,7 @@ const AddQuestions = () => {
   const route = useRoute();
   const subject = route.params?.subject || {};
   const subjectcode = subject.subjectCode || '';
+  const [output, setOutput] = useState('');
 
   const [topic, setTopic] = useState('');
   const [type, setType] = useState('');
@@ -121,6 +122,9 @@ const AddQuestions = () => {
         type: parseInt(type, 10),
         marks: parseInt(marks, 10),
         options: optionsData,
+        ...(parseInt(type, 10) === 3 && {
+          output: output.replace(/\n/g, '\\n'),
+        }),
       };
 
       const response = await fetch(
@@ -136,14 +140,18 @@ const AddQuestions = () => {
         Alert.alert(
           'Success',
           type === '2'
-            ? 'Question with options added successfully!'
+            ? 'MCQ question with options added successfully!'
+            : type === '3'
+            ? 'Shuffle code question with output added successfully!'
             : 'Question added successfully!',
         );
+
         setMarks('');
         setTopic('');
         setType('');
         setDifficulty('');
         setQuestionText('');
+        setOutput?.(''); // ← only if output is used
 
         setMcqOptions([
           {text: '', isCorrect: false},
@@ -164,7 +172,6 @@ const AddQuestions = () => {
       <View style={styles.header}>
         <Text style={styles.headerText}>Add New Question</Text>
       </View>
-
       <Text style={styles.sectionTitle}>Topic</Text>
       <Picker
         selectedValue={topic}
@@ -179,7 +186,6 @@ const AddQuestions = () => {
           />
         ))}
       </Picker>
-
       <Text style={styles.sectionTitle}>Difficulty</Text>
       <Picker
         selectedValue={difficulty}
@@ -190,7 +196,6 @@ const AddQuestions = () => {
         <Picker.Item label="Medium" value="2" />
         <Picker.Item label="Hard" value="3" />
       </Picker>
-
       <Text style={styles.sectionTitle}>Select Marks</Text>
       <Picker
         selectedValue={marks}
@@ -201,7 +206,6 @@ const AddQuestions = () => {
         <Picker.Item label="8" value="8" />
         <Picker.Item label="10" value="10" />
       </Picker>
-
       <Text style={styles.sectionTitle}>Question Type</Text>
       <Picker
         selectedValue={type}
@@ -212,21 +216,30 @@ const AddQuestions = () => {
         <Picker.Item label="MCQ" value="2" />
         <Picker.Item label="Shuffle Code" value="3" />
       </Picker>
-
       <Text style={styles.sectionTitle}>
         {type === '3'
           ? 'Shuffle Code Lines (use //n to split)'
           : 'Question Text'}
       </Text>
-
       {type === '3' ? (
-        <TextInput
-          style={[styles.input, {height: 150, textAlignVertical: 'top'}]}
-          placeholder="Enter your code and split lines using //n"
-          multiline
-          value={questionText}
-          onChangeText={setQuestionText}
-        />
+        <>
+          <TextInput
+            style={[styles.input, {height: 150, textAlignVertical: 'top'}]}
+            placeholder="Enter your code and split lines using //n"
+            multiline
+            value={questionText}
+            onChangeText={setQuestionText}
+          />
+
+          <Text style={styles.sectionTitle}>Expected Output</Text>
+          <TextInput
+            style={[styles.input, {height: 120, textAlignVertical: 'top'}]}
+            placeholder="Enter expected output here"
+            multiline
+            value={output}
+            onChangeText={setOutput}
+          />
+        </>
       ) : (
         <TextInput
           style={styles.input}
@@ -271,7 +284,6 @@ const AddQuestions = () => {
           )}
         </>
       )}
-
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>Save Question</Text>
       </TouchableOpacity>

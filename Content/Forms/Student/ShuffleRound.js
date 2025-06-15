@@ -10,6 +10,7 @@ import {
   LayoutAnimation,
   Platform,
   UIManager,
+  PanResponder,
 } from 'react-native';
 import Config from '../../Settings/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -26,6 +27,9 @@ const ShuffleRoundScreen = () => {
   const [answers, setAnswers] = useState([]);
   const [isQualified, setIsQualified] = useState(null);
   const [teamId, setTeamId] = useState(null);
+  const [questionOutputs, setQuestionOutputs] = useState({});
+  const [showOutput, setShowOutput] = useState(false);
+  const [activeTileIndex, setActiveTileIndex] = useState(null);
   const route = useRoute();
   const navigation = useNavigation();
   const competitionRoundId = route.params?.roundId ?? 1;
@@ -104,6 +108,18 @@ const ShuffleRoundScreen = () => {
       );
       const valid = loaded.filter(x => x);
       setQuestions(valid);
+
+      // Load outputs for all questions
+      const outputs = {};
+      for (const question of valid) {
+        const outputRes = await fetch(
+          `${Config.BASE_URL}/api/Questions/GetQuestionOutput/${question.id}`,
+        );
+        const outputData = await outputRes.json();
+        outputs[question.id] = outputData.output;
+      }
+      setQuestionOutputs(outputs);
+
       if (valid.length) prepare(valid[0].text);
     } catch {
       Alert.alert('Error', 'Failed to fetch questions.');
@@ -121,13 +137,30 @@ const ShuffleRoundScreen = () => {
     setTiles([...parts].sort(() => Math.random() - 0.5));
   };
 
-  const move = (idx, dir) => {
-    const arr = [...tiles];
-    const j = idx + dir;
-    if (j < 0 || j >= arr.length) return;
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    [arr[idx], arr[j]] = [arr[j], arr[idx]];
-    setTiles(arr);
+  const createPanResponder = index => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (evt, gestureState) => {
+        // Calculate which tile we're hovering over
+        const hoverIndex = Math.floor((gestureState.moveY - 100) / 60); // Adjust these values based on your layout
+        if (
+          hoverIndex >= 0 &&
+          hoverIndex < tiles.length &&
+          hoverIndex !== index
+        ) {
+          // Reorder the tiles
+          const newTiles = [...tiles];
+          const movedTile = newTiles[index];
+          newTiles.splice(index, 1);
+          newTiles.splice(hoverIndex, 0, movedTile);
+          setTiles(newTiles);
+          setActiveTileIndex(hoverIndex);
+        }
+      },
+      onPanResponderRelease: () => {
+        setActiveTileIndex(null);
+      },
+    });
   };
 
   const saveCurrent = () => {
@@ -139,7 +172,7 @@ const ShuffleRoundScreen = () => {
       questionId: q.id,
       answer: answerText,
       isCorrect,
-      marks: q.marks, // Store question marks
+      marks: q.marks,
     };
     setAnswers(prev => [...prev.filter(a => a.questionId !== q.id), newAnswer]);
     return newAnswer;
@@ -152,6 +185,7 @@ const ShuffleRoundScreen = () => {
       setCurrentIndex(ni);
       prepare(questions[ni].text);
       setShowSubmit(ni === questions.length - 1);
+      setShowOutput(false);
     }
   };
 
@@ -162,7 +196,12 @@ const ShuffleRoundScreen = () => {
       setCurrentIndex(pi);
       prepare(questions[pi].text);
       setShowSubmit(pi === questions.length - 1);
+      setShowOutput(false);
     }
+  };
+
+  const toggleOutput = () => {
+    setShowOutput(!showOutput);
   };
 
   const onFinalSubmit = () => {
@@ -186,7 +225,7 @@ const ShuffleRoundScreen = () => {
               questionId: a.questionId,
               teamId: teamId,
               answer: a.answer,
-              score: a.isCorrect ? a.marks : 0, // Use question marks
+              score: a.isCorrect ? a.marks : 0,
               submissionTime: new Date().toISOString(),
             }));
 
@@ -261,7 +300,7 @@ const ShuffleRoundScreen = () => {
       0,
     );
     const qualificationStatus =
-      obtainedMarks >= totalMarks * 0.5 ? 'Qualified' : 'Not Qualified'; // 50% criteria
+      obtainedMarks >= totalMarks * 0.5 ? 'Qualified' : 'Not Qualified';
 
     return (
       <ScrollView style={styles.container}>
@@ -326,59 +365,76 @@ const ShuffleRoundScreen = () => {
   }
 
   const q = questions[currentIndex];
+  const currentOutput = q ? questionOutputs[q.id] : '';
 
   return (
     <ScrollView style={styles.container}>
       {q && (
-        <Text style={styles.header}>
-          Shuffle Round — Q{currentIndex + 1}/{questions.length} ({q.marks}{' '}
-          marks)
-        </Text>
+        <>
+          <Text style={styles.header}>
+            Shuffle Round — Q{currentIndex + 1}/{questions.length} ({q.marks}{' '}
+            marks)
+          </Text>
+          <View style={styles.progressBarContainer}>
+            <View
+              style={[
+                styles.progressBarFill,
+                {width: `${((currentIndex + 1) / questions.length) * 100}%`},
+              ]}
+            />
+          </View>
+          <Text style={styles.instruction}>Drag and drop to reorder lines</Text>
+
+          <TouchableOpacity
+            style={styles.outputToggleButton}
+            onPress={toggleOutput}>
+            <Text style={styles.outputToggleButtonText}>
+              {showOutput ? 'Hide Expected Output' : 'Show Expected Output'}
+            </Text>
+          </TouchableOpacity>
+
+          {showOutput && currentOutput && (
+            <View style={styles.outputContainer}>
+              <Text style={styles.outputLabel}>Expected Output:</Text>
+              <Text style={styles.outputText}>{currentOutput}</Text>
+            </View>
+          )}
+
+          <View style={styles.tilesContainer}>
+            {tiles.map((tile, index) => {
+              const panResponder = createPanResponder(index);
+              return (
+                <View
+                  key={tile.key}
+                  style={[
+                    styles.tile,
+                    activeTileIndex === index && styles.activeTile,
+                  ]}
+                  {...panResponder.panHandlers}>
+                  <Text style={styles.tileText}>{tile.text}</Text>
+                </View>
+              );
+            })}
+          </View>
+
+          <View style={styles.footer}>
+            {currentIndex > 0 && (
+              <TouchableOpacity style={styles.btn} onPress={onPrev}>
+                <Text style={styles.btnText}>Prev</Text>
+              </TouchableOpacity>
+            )}
+            {showSubmit ? (
+              <TouchableOpacity style={styles.btn} onPress={onFinalSubmit}>
+                <Text style={styles.btnText}>Submit</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.btn} onPress={onNext}>
+                <Text style={styles.btnText}>Next</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </>
       )}
-      <View style={styles.progressBarContainer}>
-        <View
-          style={[
-            styles.progressBarFill,
-            {width: `${((currentIndex + 1) / questions.length) * 100}%`},
-          ]}
-        />
-      </View>
-      <Text style={styles.instruction}>Tap ▲ or ▼ to reorder lines</Text>
-      {tiles.map((tile, idx) => (
-        <View key={tile.key} style={styles.tileRow}>
-          <View style={styles.tile}>
-            <Text style={styles.tileText}>{tile.text}</Text>
-          </View>
-          <View style={styles.arrows}>
-            <TouchableOpacity
-              onPress={() => move(idx, -1)}
-              style={styles.arrowBtn}>
-              <Text style={styles.arrow}>▲</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => move(idx, +1)}
-              style={styles.arrowBtn}>
-              <Text style={styles.arrow}>▼</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ))}
-      <View style={styles.footer}>
-        {currentIndex > 0 && (
-          <TouchableOpacity style={styles.btn} onPress={onPrev}>
-            <Text style={styles.btnText}>Prev</Text>
-          </TouchableOpacity>
-        )}
-        {showSubmit ? (
-          <TouchableOpacity style={styles.btn} onPress={onFinalSubmit}>
-            <Text style={styles.btnText}>Submit</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.btn} onPress={onNext}>
-            <Text style={styles.btnText}>Next</Text>
-          </TouchableOpacity>
-        )}
-      </View>
     </ScrollView>
   );
 };
@@ -409,25 +465,22 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFD700',
   },
   instruction: {color: '#fff', marginBottom: 12},
-  tileRow: {flexDirection: 'row', alignItems: 'center', marginBottom: 8},
+  tilesContainer: {
+    marginBottom: 16,
+  },
   tile: {
-    flex: 1,
     backgroundColor: '#1f1f1f',
-    padding: 12,
-    borderRadius: 6,
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#444',
   },
-  tileText: {color: '#fff'},
-  arrows: {marginLeft: 8},
-  arrowBtn: {
-    backgroundColor: '#333',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    marginVertical: 2,
+  activeTile: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#FFD700',
   },
-  arrow: {color: '#fff'},
+  tileText: {color: '#fff', fontSize: 16},
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -497,6 +550,34 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginVertical: 5,
+  },
+  outputToggleButton: {
+    backgroundColor: '#333',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 12,
+    alignItems: 'center',
+  },
+  outputToggleButtonText: {
+    color: '#FFD700',
+    fontWeight: 'bold',
+  },
+  outputContainer: {
+    backgroundColor: '#1a1a1a',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FFD70055',
+  },
+  outputLabel: {
+    color: '#FFD700',
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  outputText: {
+    color: '#fff',
+    fontFamily: 'Courier New',
   },
 });
 
