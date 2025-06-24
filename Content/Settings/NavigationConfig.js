@@ -33,6 +33,7 @@ import StudentLeaderboardRoundScreen from '../Forms/Student/StudentLeaderBoardRo
 import StudentLeaderboardResultScreen from '../Forms/Student/StudentLeaderBoardResult';
 import AttemptedSpeedProgrammingScreenQuestionsScreen from '../Forms/Expert/CheckAttemptedSpeedProgrammingQuestion';
 import ViewSpeedProgrammingScreenQuestionsScreen from '../Forms/Student/ViewAttemptedSpeedProgrammingScreenQuestionsScreen';
+import BuzzerScreen from '../Forms/Student/BuzzerRound';
 
 const Stack = createStackNavigator();
 
@@ -87,6 +88,7 @@ const Navigation = () => {
           component={SpeedProgrammingScreen}
         />
         <Stack.Screen name="ShuffleScreen" component={ShuffleRoundScreen} />
+        <Stack.Screen name="BuzzerScreen" component={BuzzerScreen} />
         <Stack.Screen name="CheckTask" component={CheckTaskscreen} />
         <Stack.Screen
           name="CheckAttemptedTaskQuestion"

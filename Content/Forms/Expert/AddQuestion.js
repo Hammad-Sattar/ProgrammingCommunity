@@ -22,7 +22,7 @@ const AddQuestions = () => {
 
   const [topic, setTopic] = useState('');
   const [type, setType] = useState('');
-  const [difficulty, setDifficulty] = useState('');
+  const [difficulty, setDifficulty] = useState(0);
   const [marks, setMarks] = useState('');
   const [mcqOptions, setMcqOptions] = useState([{text: '', isCorrect: false}]);
   const [questionText, setQuestionText] = useState('');
@@ -115,17 +115,17 @@ const AddQuestions = () => {
       const questionData = {
         id: 0,
         subjectCode: subjectcode,
-        topicId: topic,
+        topicId: parseInt(topic, 10),
         userId: parseInt(storedUserId, 10),
-        difficulty,
+        difficulty: parseInt(difficulty, 10),
         text: questionText.trim(),
         type: parseInt(type, 10),
         marks: parseInt(marks, 10),
         options: optionsData,
-        ...(parseInt(type, 10) === 3 && {
-          output: output.replace(/\n/g, '\\n'),
-        }),
+        output: parseInt(type, 10) === 3 ? output.replace(/\n/g, '\\n') : null,
       };
+
+      console.log('Request Payload:', JSON.stringify(questionData, null, 2));
 
       const response = await fetch(
         `${Config.BASE_URL}/api/Questions/AddQuestionWithOptions`,
@@ -135,6 +135,8 @@ const AddQuestions = () => {
           body: JSON.stringify(questionData),
         },
       );
+      const errorResponse = await response.text();
+      console.log('Error Response:', errorResponse);
 
       if (response.ok) {
         Alert.alert(

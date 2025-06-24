@@ -50,10 +50,10 @@ const RegistrationScreen = () => {
       Alert.alert('Validation Error', 'Please enter your last name.');
       return false;
     }
-    if (!formData.phonenum.trim() || formData.phonenum.length < 10) {
+    if (!formData.phonenum.trim() || formData.phonenum.length < 11) {
       Alert.alert(
         'Validation Error',
-        'Please enter a valid phone number (at least 10 digits).',
+        'Please enter a valid phone number (at least 11 digits).',
       );
       return false;
     }
@@ -89,6 +89,7 @@ const RegistrationScreen = () => {
       section: formData.role === '3' ? formData.section : null,
       semester: formData.role === '3' ? formData.semester : null,
       email: formData.email,
+
       phonenum: formData.phonenum,
       firstname: formData.firstname,
       lastname: formData.lastname,

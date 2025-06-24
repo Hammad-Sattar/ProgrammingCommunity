@@ -47,26 +47,53 @@ const MCQScreen = () => {
   }, []);
 
   useEffect(() => {
-    const checkQualificationStatus = async () => {
-      if (competitionRoundId <= 1) {
-        fetchQuestions();
-        return;
-      }
-      const response = await fetch(
-        `${
-          Config.BASE_URL
-        }/api/RoundResult/CheckQualificationStatus/${teamId}/${
-          competitionRoundId - 1
-        }`,
-      );
-      const data = await response.json();
-      if (data.isQualified) {
-        fetchQuestions();
-      } else {
+    const checkRoundAndQualification = async () => {
+      try {
+        const roundRes = await fetch(
+          `${Config.BASE_URL}/api/CompetitionRound/IsFirstRound/${competitionRoundId}`,
+        );
+
+        if (!roundRes.ok) {
+          Alert.alert('Error', 'Failed to check round number.');
+          return;
+        }
+
+        const isFirstRound = await roundRes.json();
+        console.log('Is First Round:', isFirstRound);
+
+        if (isFirstRound) {
+          fetchQuestions();
+        } else {
+          const response = await fetch(
+            `${
+              Config.BASE_URL
+            }/api/RoundResult/CheckQualificationStatus/${teamId}/${
+              competitionRoundId - 1
+            }`,
+          );
+
+          if (!response.ok) {
+            Alert.alert('Error', 'Failed to check qualification status.');
+            return;
+          }
+
+          const data = await response.json();
+
+          if (data.isQualified) {
+            fetchQuestions();
+          } else {
+            Alert.alert(
+              'Qualification Status',
+              'Sorry, you did not qualify for the previous round.',
+              [{text: 'OK', onPress: () => navigation.goBack()}],
+            );
+          }
+        }
+      } catch (error) {
+        console.error(error);
         Alert.alert(
-          'Qualification Status',
-          'Sorry, you did not qualify for the previous round.',
-          [{text: 'OK', onPress: () => navigation.goBack()}],
+          'Error',
+          'Something went wrong while checking round or qualification.',
         );
       }
     };
@@ -77,17 +104,20 @@ const MCQScreen = () => {
         Alert.alert('Error', 'Competition ID not found in storage.');
         return;
       }
+
       try {
         const res = await fetch(
           `${Config.BASE_URL}/api/CompetitionRoundQuestion/GetCompetitionRoundQuestion?competitionRoundId=${competitionRoundId}`,
         );
         const questionList = await res.json();
+
         const fetched = await Promise.all(
           questionList.map(async q => {
             const qRes = await fetch(
               `${Config.BASE_URL}/api/Questions/GetQuestionById/${q.questionId}`,
             );
             const qData = await qRes.json();
+
             if (qData.type === 2) {
               const optRes = await fetch(
                 `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${q.questionId}`,
@@ -95,9 +125,11 @@ const MCQScreen = () => {
               const options = await optRes.json();
               return {...qData, options};
             }
+
             return qData;
           }),
         );
+
         setQuestions(fetched.filter(q => q != null));
       } catch (err) {
         console.error(err);
@@ -107,7 +139,7 @@ const MCQScreen = () => {
       }
     };
 
-    checkQualificationStatus();
+    checkRoundAndQualification();
   }, [competitionRoundId]);
 
   const handleOptionSelect = (questionId, optionId) => {

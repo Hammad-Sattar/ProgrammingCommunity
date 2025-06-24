@@ -7,61 +7,27 @@ import {
   StyleSheet,
   TextInput,
   ActivityIndicator,
-  Modal,
-  ScrollView,
 } from 'react-native';
+import 'react-native-url-polyfill/auto';
+import * as signalR from '@microsoft/signalr';
 import Config from '../Settings/Config';
 
-export default function BuzzerScreenApi({route}) {
-  // Get teamId and teamName from navigation params
-  const {teamId = 1, teamName = 'Team 1'} = route.params || {};
-
-  const [firstPressedTeam, setFirstPressedTeam] = useState(null);
-  const [question, setQuestion] = useState(null);
+export default function Buzzer() {
+  const [connection, setConnection] = useState(null);
   const [status, setStatus] = useState('Disconnected');
+  const [firstPressed, setFirstPressed] = useState(null);
+  const [question, setQuestion] = useState(null);
   const [answerText, setAnswerText] = useState('');
   const [loading, setLoading] = useState(true);
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showReviewModal, setShowReviewModal] = useState(false);
-  const [userAnswers, setUserAnswers] = useState([]);
-  const [pollingInterval, setPollingInterval] = useState(null);
 
-  const competitionRoundId = 9;
+  const userId = 1; // Fixed as single user
+  const competitionRoundId = 1;
 
-  const resetBuzzer = async () => {
-    try {
-      await fetch(`${Config.BASE_URL}/api/buzzer/reset`, {
-        method: 'POST',
-      });
-      setFirstPressedTeam(null);
-      setAnswerText('');
-      setSelectedOption(null);
-    } catch (error) {
-      Alert.alert('Error', error.toString());
-    }
-  };
-
-  const checkBuzzerStatus = async () => {
-    try {
-      const response = await fetch(`${Config.BASE_URL}/api/buzzer/status/`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data) {
-          setFirstPressedTeam({
-            id: data.teamId,
-            name: data.teamName,
-            pressTime: new Date(data.pressTime),
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error checking buzzer status:', error);
-    }
-  };
-
+  // Pre-load questions
   useEffect(() => {
     const fetchQuestions = async () => {
       try {
@@ -88,13 +54,63 @@ export default function BuzzerScreenApi({route}) {
   useEffect(() => {
     if (questions.length === 0) return;
 
-    const interval = setInterval(checkBuzzerStatus, 1000);
-    setPollingInterval(interval);
+    const setupConnection = async () => {
+      const newConnection = new signalR.HubConnectionBuilder()
+        .withUrl(`http://192.168.250.196:8080/buzzerhub`)
+        .withAutomaticReconnect()
+        .build();
+
+      setConnection(newConnection);
+
+      newConnection
+        .start()
+        .then(() => setStatus('Connected'))
+        .catch(err => setStatus(`Connection error: ${err.toString()}`));
+
+      newConnection.onclose(() => setStatus('Disconnected'));
+
+      newConnection.on('BuzzerPressed', (pressedUserId, questionId) => {
+        setFirstPressed(pressedUserId);
+        if (pressedUserId === userId) {
+          Alert.alert('Success', 'You pressed first!');
+        } else {
+          Alert.alert('Info', `User ${pressedUserId} pressed first`);
+        }
+      });
+
+      newConnection.on('BuzzerAlreadyPressed', pressedUserId => {
+        Alert.alert('Info', `Buzzer already pressed by User ${pressedUserId}`);
+      });
+
+      newConnection.on('ResetBuzzer', () => {
+        setFirstPressed(null);
+        setAnswerText('');
+        setSelectedOption(null);
+      });
+
+      newConnection.on('MoveToNextQuestion', () => {
+        setCurrentQuestionIndex(prev => {
+          const nextIndex = prev + 1;
+          if (nextIndex >= questions.length) {
+            Alert.alert('Round Completed', 'All questions have been answered!');
+            return prev;
+          }
+          loadQuestionDetails(questions[nextIndex].questionId);
+          return nextIndex;
+        });
+      });
+    };
+
+    setupConnection();
 
     return () => {
-      if (pollingInterval) clearInterval(pollingInterval);
+      connection?.off('BuzzerPressed');
+      connection?.off('BuzzerAlreadyPressed');
+      connection?.off('ResetBuzzer');
+      connection?.off('MoveToNextQuestion');
+      connection?.stop();
     };
-  }, [questions, currentQuestionIndex]);
+  }, [questions]);
 
   const loadQuestionDetails = async questionId => {
     try {
@@ -114,7 +130,9 @@ export default function BuzzerScreenApi({route}) {
         setQuestion(qData);
       }
 
-      await resetBuzzer();
+      setFirstPressed(null);
+      setAnswerText('');
+      setSelectedOption(null);
     } catch (err) {
       console.error(err);
       Alert.alert('Error', 'Failed to fetch question details');
@@ -124,55 +142,30 @@ export default function BuzzerScreenApi({route}) {
   };
 
   const pressBuzzer = async () => {
-    try {
-      const questionId = questions[currentQuestionIndex]?.questionId;
-      if (!questionId) {
-        Alert.alert('Error', 'No questions available');
-        return;
+    if (connection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        const questionId = questions[currentQuestionIndex]?.questionId;
+        if (!questionId) {
+          Alert.alert('Error', 'No questions available');
+          return;
+        }
+        await connection.invoke('PressBuzzer', userId, questionId);
+      } catch (error) {
+        Alert.alert('Error', error.toString());
       }
-
-      const response = await fetch(`${Config.BASE_URL}/api/buzzer/press`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          teamId: teamId,
-          questionId: questionId,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        setFirstPressedTeam({
-          id: teamId,
-          name: teamName,
-          pressTime: new Date(result.pressTime),
-        });
-      } else {
-        Alert.alert(
-          'Info',
-          `${result.firstPressTeamName} already pressed first at ${new Date(
-            result.pressTime,
-          ).toLocaleTimeString()}`,
-        );
-      }
-    } catch (error) {
-      Alert.alert('Error', error.toString());
+    } else {
+      Alert.alert('Error', 'SignalR not connected');
     }
   };
 
   const moveToNextQuestion = async () => {
-    setCurrentQuestionIndex(prev => {
-      const nextIndex = prev + 1;
-      if (nextIndex >= questions.length) {
-        setShowReviewModal(true);
-        return prev;
+    if (connection?.state === signalR.HubConnectionState.Connected) {
+      try {
+        await connection.invoke('MoveToNextQuestion');
+      } catch (error) {
+        Alert.alert('Error', error.toString());
       }
-      loadQuestionDetails(questions[nextIndex].questionId);
-      return nextIndex;
-    });
+    }
   };
 
   const handleOptionSelect = optionId => {
@@ -185,27 +178,36 @@ export default function BuzzerScreenApi({route}) {
     try {
       setIsSubmitting(true);
 
-      let answerToStore = {
-        teamId: teamId,
-        teamName: teamName,
-        questionId: question.id,
-        questionText: question.text,
-        answer:
-          question.type === 1
-            ? answerText
-            : question.options?.find(opt => opt.id === selectedOption)
-                ?.option || 'Selected option',
-      };
-
-      setUserAnswers(prev => [...prev, answerToStore]);
-      Alert.alert('Success', 'Answer submitted successfully!');
-      await resetBuzzer();
-      await moveToNextQuestion();
-      setAnswerText('');
-
-      if (currentQuestionIndex + 1 >= questions.length) {
-        setShowReviewModal(true);
+      let answerData;
+      if (question.type === 1) {
+        if (!answerText.trim()) {
+          Alert.alert('Error', 'Please enter your answer');
+          return;
+        }
+        answerData = {
+          userId: firstPressed,
+          questionId: question.id,
+          answerText,
+        };
+      } else if (question.type === 2) {
+        if (selectedOption === null) {
+          Alert.alert('Error', 'Please select an option');
+          return;
+        }
+        answerData = {
+          userId: firstPressed,
+          questionId: question.id,
+          selectedOptionId: selectedOption,
+        };
       }
+
+      Alert.alert('Success', 'Answer submitted successfully!');
+
+      if (connection?.state === signalR.HubConnectionState.Connected) {
+        await connection.invoke('ResetBuzzer');
+      }
+      setFirstPressed(null);
+      await moveToNextQuestion();
     } catch (err) {
       console.error(err);
       Alert.alert('Error', 'Failed to submit answer');
@@ -214,52 +216,12 @@ export default function BuzzerScreenApi({route}) {
     }
   };
 
-  const renderReviewModal = () => (
-    <Modal
-      animationType="slide"
-      transparent={true}
-      visible={showReviewModal}
-      onRequestClose={() => setShowReviewModal(false)}>
-      <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Your Answers Review</Text>
-          <ScrollView>
-            {userAnswers.map((answer, index) => (
-              <View key={index} style={styles.answerItem}>
-                <Text style={styles.questionReviewText}>
-                  Q{index + 1}: {answer.questionText}
-                </Text>
-                <Text style={styles.teamReviewText}>
-                  Team: {answer.teamName}
-                </Text>
-                <Text style={styles.answerReviewText}>
-                  Answer: {answer.answer}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setShowReviewModal(false)}>
-            <Text style={styles.closeButtonText}>Close</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  const isFirstPress = firstPressedTeam?.id === teamId;
-  const isOtherTeamPressed = firstPressedTeam && !isFirstPress;
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerText}>Status: {status}</Text>
         <Text style={styles.headerText}>
           Question: {currentQuestionIndex + 1} of {questions.length}
-        </Text>
-        <Text style={styles.teamHeader}>
-          {teamName} (Team {teamId})
         </Text>
       </View>
 
@@ -272,7 +234,8 @@ export default function BuzzerScreenApi({route}) {
       )}
 
       <View style={styles.content}>
-        {firstPressedTeam === null ? (
+        {firstPressed === null ? (
+          // Buzzer not pressed state
           <View style={styles.buzzerContainer}>
             <Text style={styles.instructionText}>
               Press the buzzer when you know the answer!
@@ -281,9 +244,10 @@ export default function BuzzerScreenApi({route}) {
               <Text style={styles.buttonText}>PRESS BUZZER</Text>
             </TouchableOpacity>
           </View>
-        ) : isFirstPress ? (
+        ) : firstPressed === userId ? (
+          // User pressed first state
           <View style={styles.answerContainer}>
-            <Text style={styles.successText}>{teamName} pressed first!</Text>
+            <Text style={styles.successText}>You pressed first!</Text>
             <Text style={styles.instructionText}>Submit your answer:</Text>
 
             {question?.type === 2 ? (
@@ -321,21 +285,16 @@ export default function BuzzerScreenApi({route}) {
               )}
             </TouchableOpacity>
           </View>
-        ) : isOtherTeamPressed ? (
+        ) : (
+          // Someone else pressed first state
           <View style={styles.waitingContainer}>
             <Text style={styles.infoText}>
-              {firstPressedTeam.name} pressed first!
+              User {firstPressed} pressed first!
             </Text>
             <Text style={styles.waitingText}>Waiting for next question...</Text>
           </View>
-        ) : null}
+        )}
       </View>
-
-      <TouchableOpacity onPress={resetBuzzer} style={styles.resetButton}>
-        <Text style={styles.buttonText}>RESET BUZZER</Text>
-      </TouchableOpacity>
-
-      {renderReviewModal()}
     </View>
   );
 }
@@ -355,12 +314,6 @@ const styles = StyleSheet.create({
   headerText: {
     color: '#FFD700',
     fontSize: 16,
-  },
-  teamHeader: {
-    color: '#FFD700',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginTop: 5,
   },
   questionContainer: {
     padding: 15,
@@ -420,21 +373,11 @@ const styles = StyleSheet.create({
     width: '80%',
     alignItems: 'center',
     elevation: 5,
-    marginVertical: 5,
-  },
-  resetButton: {
-    padding: 15,
-    backgroundColor: '#FF5733',
-    borderRadius: 10,
-    width: '80%',
-    alignSelf: 'center',
-    alignItems: 'center',
-    marginTop: 10,
   },
   buttonText: {
     color: '#111',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 20,
   },
   optionsContainer: {
     marginVertical: 15,
@@ -477,61 +420,5 @@ const styles = StyleSheet.create({
     color: '#111',
     fontWeight: 'bold',
     fontSize: 18,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-  },
-  modalContent: {
-    width: '90%',
-    backgroundColor: '#222',
-    borderRadius: 10,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    color: '#FFD700',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 15,
-  },
-  answerItem: {
-    backgroundColor: '#333',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  questionReviewText: {
-    color: '#FFD700',
-    fontSize: 16,
-    textAlign: 'left',
-  },
-  teamReviewText: {
-    color: '#4CAF50',
-    fontSize: 14,
-    marginTop: 5,
-    textAlign: 'left',
-    fontWeight: 'bold',
-  },
-  answerReviewText: {
-    color: '#FFF',
-    fontSize: 14,
-    marginTop: 5,
-    textAlign: 'left',
-  },
-  closeButton: {
-    marginTop: 15,
-    padding: 12,
-    backgroundColor: '#FFD700',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  closeButtonText: {
-    color: '#111',
-    fontWeight: 'bold',
-    fontSize: 16,
   },
 });

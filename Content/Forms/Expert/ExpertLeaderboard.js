@@ -22,6 +22,7 @@ const ExpertLeadearBoard = () => {
       try {
         const storedUserId = await AsyncStorage.getItem('userId');
         const userId = parseInt(storedUserId, 10);
+        console.log('Fetched userId:', userId);
         if (!isNaN(userId)) {
           fetchCompetitions(userId);
         } else {
@@ -39,7 +40,9 @@ const ExpertLeadearBoard = () => {
   }, []);
 
   const fetchCompetitions = userId => {
-    fetch(`${Config.BASE_URL}/api/Competition/GetCompetitionsByExpert/${3}`)
+    fetch(
+      `${Config.BASE_URL}/api/Competition/GetCompetitionsByExpert/${userId}`,
+    )
       .then(async response => {
         if (!response.ok) {
           const errorText = await response.text();

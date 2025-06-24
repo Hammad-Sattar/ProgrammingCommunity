@@ -32,5 +32,6 @@ import ExpertLeaderboardResultScreen from './Content/Forms/Expert/ExpertLeadearB
 import AttemptedSpeedProgrammingScreenQuestionsScreen from './Content/Forms/Expert/CheckAttemptedSpeedProgrammingQuestion';
 import BuzzerRoundScreen from './Content/Test/Buzzerscreen';
 import BuzzerScreenApi from './Content/Test/buzzer_api';
+import Buzzer from './Content/Test/Buzzerscreen';
 
 AppRegistry.registerComponent(appName, () => Navigation);

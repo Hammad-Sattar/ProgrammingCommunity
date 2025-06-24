@@ -61,6 +61,19 @@ const AttemptedSpeedProgrammingScreenQuestionsScreen = ({route}) => {
     } catch (error) {
       Alert.alert('Error', error.message);
     }
+    const roundResultRes = await fetch(
+      `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+      {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+      },
+    );
+
+    if (roundResultRes.ok) {
+      console.log('Round results inserted successfully.');
+    } else {
+      console.error('Failed to insert round results');
+    }
   };
 
   const renderItem = ({item}) => (

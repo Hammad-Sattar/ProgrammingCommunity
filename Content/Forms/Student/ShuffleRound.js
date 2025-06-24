@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
-  LayoutAnimation,
   Platform,
   UIManager,
   PanResponder,
@@ -37,11 +36,8 @@ const ShuffleRoundScreen = () => {
   useEffect(() => {
     const fetchTeamId = async () => {
       const savedTeamId = await AsyncStorage.getItem('teamId');
-      if (savedTeamId) {
-        setTeamId(savedTeamId);
-      } else {
-        Alert.alert('Error', 'Team ID not found.');
-      }
+      if (savedTeamId) setTeamId(savedTeamId);
+      else Alert.alert('Error', 'Team ID not found.');
     };
 
     if (
@@ -60,27 +56,40 @@ const ShuffleRoundScreen = () => {
   }, [teamId, competitionRoundId]);
 
   const loadQualificationStatus = async () => {
-    if (competitionRoundId <= 1) {
-      setIsQualified(true);
-      loadQuestions();
-      return;
-    }
-    const response = await fetch(
-      `${Config.BASE_URL}/api/RoundResult/CheckQualificationStatus/${teamId}/${
-        competitionRoundId - 1
-      }`,
-    );
-    const data = await response.json();
-    if (data.isQualified) {
-      setIsQualified(true);
-      loadQuestions();
-    } else {
-      setIsQualified(false);
-      Alert.alert(
-        'Qualification Status',
-        'Sorry, you did not qualify for the previous round.',
-        [{text: 'OK'}],
+    try {
+      const roundCheckRes = await fetch(
+        `${Config.BASE_URL}/api/CompetitionRound/IsFirstRound/${competitionRoundId}`,
       );
+      const isFirstRound = await roundCheckRes.json();
+
+      if (isFirstRound === true) {
+        setIsQualified(true);
+        loadQuestions();
+        return;
+      }
+
+      const response = await fetch(
+        `${
+          Config.BASE_URL
+        }/api/RoundResult/CheckQualificationStatus/${teamId}/${
+          competitionRoundId - 1
+        }`,
+      );
+      const data = await response.json();
+
+      if (data.isQualified) {
+        setIsQualified(true);
+        loadQuestions();
+      } else {
+        setIsQualified(false);
+        Alert.alert(
+          'Qualification Status',
+          'Sorry, you did not qualify for the previous round.',
+          [{text: 'OK'}],
+        );
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to check qualification status.');
     }
   };
 
@@ -109,7 +118,6 @@ const ShuffleRoundScreen = () => {
       const valid = loaded.filter(x => x);
       setQuestions(valid);
 
-      // Load outputs for all questions
       const outputs = {};
       for (const question of valid) {
         const outputRes = await fetch(
@@ -120,7 +128,10 @@ const ShuffleRoundScreen = () => {
       }
       setQuestionOutputs(outputs);
 
-      if (valid.length) prepare(valid[0].text);
+      if (valid.length) {
+        prepare(valid[0].text);
+        if (valid.length === 1) setShowSubmit(true);
+      }
     } catch {
       Alert.alert('Error', 'Failed to fetch questions.');
     } finally {
@@ -141,14 +152,12 @@ const ShuffleRoundScreen = () => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onPanResponderMove: (evt, gestureState) => {
-        // Calculate which tile we're hovering over
-        const hoverIndex = Math.floor((gestureState.moveY - 100) / 60); // Adjust these values based on your layout
+        const hoverIndex = Math.floor((gestureState.moveY - 100) / 60);
         if (
           hoverIndex >= 0 &&
           hoverIndex < tiles.length &&
           hoverIndex !== index
         ) {
-          // Reorder the tiles
           const newTiles = [...tiles];
           const movedTile = newTiles[index];
           newTiles.splice(index, 1);
@@ -241,28 +250,13 @@ const ShuffleRoundScreen = () => {
 
               if (res.ok) {
                 setReviewMode(true);
-
-                const roundResultPayload = {
-                  competitionRoundId,
-                  teamId,
-                  totalScore: payload.reduce(
-                    (total, answer) => total + answer.score,
-                    0,
-                  ),
-                };
-
-                const roundResultRes = await fetch(
+                await fetch(
                   `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
                   {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(roundResultPayload),
                   },
                 );
-
-                if (!roundResultRes.ok) {
-                  console.error('Failed to insert round results');
-                }
               } else {
                 Alert.alert('Error', 'Submission failed');
               }
@@ -305,11 +299,9 @@ const ShuffleRoundScreen = () => {
     return (
       <ScrollView style={styles.container}>
         <Text style={styles.header}>📝 Review Your Answers</Text>
-
         {answers.map(a => {
           const q = questions.find(x => x.id === a.questionId);
           const codeLines = q.text.split('//n').filter(l => l.trim());
-
           return (
             <View key={q.id} style={styles.reviewBox}>
               <Text style={styles.questionLabel}>
@@ -321,14 +313,12 @@ const ShuffleRoundScreen = () => {
                   {l.trim()}
                 </Text>
               ))}
-
               <Text style={styles.questionLabel}>Your Arrangement:</Text>
               {a.answer.split('\n').map((l, i) => (
                 <Text key={i} style={styles.codeLine}>
                   {l}
                 </Text>
               ))}
-
               <Text
                 style={[
                   styles.answerStatus,
@@ -338,11 +328,8 @@ const ShuffleRoundScreen = () => {
                   ? `✓ Correct (${q.marks}/${q.marks})`
                   : `✗ Incorrect (0/${q.marks})`}
               </Text>
-
               {!a.isCorrect && (
-                <TouchableOpacity
-                  style={styles.challengeButton}
-                  onPress={() => handleChallenge(q.id)}>
+                <TouchableOpacity style={styles.challengeButton}>
                   <Text style={styles.challengeButtonText}>
                     Challenge This Answer
                   </Text>
@@ -351,7 +338,6 @@ const ShuffleRoundScreen = () => {
             </View>
           );
         })}
-
         <View style={styles.scoreSummary}>
           <Text style={styles.summaryText}>
             Obtained Marks: {obtainedMarks}/{totalMarks}
@@ -384,7 +370,6 @@ const ShuffleRoundScreen = () => {
             />
           </View>
           <Text style={styles.instruction}>Drag and drop to reorder lines</Text>
-
           <TouchableOpacity
             style={styles.outputToggleButton}
             onPress={toggleOutput}>
@@ -392,14 +377,16 @@ const ShuffleRoundScreen = () => {
               {showOutput ? 'Hide Expected Output' : 'Show Expected Output'}
             </Text>
           </TouchableOpacity>
-
           {showOutput && currentOutput && (
             <View style={styles.outputContainer}>
               <Text style={styles.outputLabel}>Expected Output:</Text>
-              <Text style={styles.outputText}>{currentOutput}</Text>
+              {currentOutput.split('\\n').map((line, idx) => (
+                <Text key={idx} style={styles.outputText}>
+                  {line}
+                </Text>
+              ))}
             </View>
           )}
-
           <View style={styles.tilesContainer}>
             {tiles.map((tile, index) => {
               const panResponder = createPanResponder(index);
@@ -416,7 +403,6 @@ const ShuffleRoundScreen = () => {
               );
             })}
           </View>
-
           <View style={styles.footer}>
             {currentIndex > 0 && (
               <TouchableOpacity style={styles.btn} onPress={onPrev}>

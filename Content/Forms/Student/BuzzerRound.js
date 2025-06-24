@@ -10,12 +10,16 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
-import Config from '../Settings/Config';
+import Config from '../../Settings/Config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useNavigation} from '@react-navigation/native';
 
-export default function BuzzerScreenApi({route}) {
-  const teamId = 2;
-  const teamName = 'Team B';
-  const competitionRoundId = 9;
+export default function BuzzerScreen({route}) {
+  const navigation = useNavigation();
+  const [teamId, setTeamId] = useState(null);
+  const [teamName, setTeamName] = useState('');
+  const [isTeamDataReady, setIsTeamDataReady] = useState(false);
+  const competitionRoundId = route.params?.roundId ?? 1;
 
   const [firstPressedTeam, setFirstPressedTeam] = useState(null);
   const [question, setQuestion] = useState(null);
@@ -29,10 +33,41 @@ export default function BuzzerScreenApi({route}) {
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [userAnswers, setUserAnswers] = useState([]);
 
-  // Track previous waiting state
   const prevIsOtherTeamPressed = useRef(false);
 
-  // Fetch all questions for the competition round
+  // Fetch team data
+  useEffect(() => {
+    const fetchTeamData = async () => {
+      try {
+        const storedTeamId = await AsyncStorage.getItem('teamId');
+        if (!storedTeamId) throw new Error('Team ID not found');
+
+        const numTeamId = parseInt(storedTeamId);
+        if (isNaN(numTeamId)) throw new Error('Invalid Team ID format');
+
+        const nameResponse = await fetch(
+          `${Config.BASE_URL}/api/Team/GetTeamName/${numTeamId}`,
+        );
+        if (!nameResponse.ok) throw new Error('Failed to fetch team name');
+
+        const name = await nameResponse.text();
+        if (typeof name !== 'string' || name.length === 0) {
+          throw new Error('Invalid team name received');
+        }
+
+        setTeamId(numTeamId);
+        setTeamName(name.trim());
+        setIsTeamDataReady(true);
+      } catch (error) {
+        console.error('Team data error:', error);
+        Alert.alert('Error', 'Failed to load team data');
+      }
+    };
+
+    fetchTeamData();
+  }, []);
+
+  // Fetch questions
   const fetchQuestions = useCallback(async () => {
     try {
       setLoading(true);
@@ -40,14 +75,11 @@ export default function BuzzerScreenApi({route}) {
         `${Config.BASE_URL}/api/CompetitionRoundQuestion/GetCompetitionRoundQuestion?competitionRoundId=${competitionRoundId}`,
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch questions');
-      }
+      if (!response.ok) throw new Error('Failed to fetch questions');
 
       const questionList = await response.json();
       setQuestions(questionList);
 
-      // Load the first question if available
       if (questionList.length > 0) {
         await loadQuestionDetails(questionList[0].questionId);
       }
@@ -62,23 +94,19 @@ export default function BuzzerScreenApi({route}) {
     }
   }, [competitionRoundId]);
 
-  // Load details for a specific question
+  // Load question details
   const loadQuestionDetails = useCallback(async questionId => {
     try {
       setLoading(true);
-
-      // Fetch question details
       const questionResponse = await fetch(
         `${Config.BASE_URL}/api/Questions/GetQuestionById/${questionId}`,
       );
 
-      if (!questionResponse.ok) {
+      if (!questionResponse.ok)
         throw new Error('Failed to fetch question details');
-      }
 
       const questionData = await questionResponse.json();
 
-      // If it's a multiple choice question, fetch options
       if (questionData.type === 2) {
         const optionsResponse = await fetch(
           `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${questionId}`,
@@ -101,7 +129,7 @@ export default function BuzzerScreenApi({route}) {
     }
   }, []);
 
-  // Check current buzzer status
+  // Check buzzer status
   const checkBuzzerStatus = useCallback(async () => {
     try {
       const response = await fetch(
@@ -112,17 +140,15 @@ export default function BuzzerScreenApi({route}) {
         setFirstPressedTeam(null);
       } else if (response.ok) {
         const data = await response.json();
-        if (data) {
-          setFirstPressedTeam({
-            id: data.teamId,
-            name: data.teamName,
-            pressTime: new Date(data.pressTime),
-          });
-        } else {
-          setFirstPressedTeam(null);
-        }
-      } else {
-        console.warn(`Unexpected response: ${response.status}`);
+        setFirstPressedTeam(
+          data
+            ? {
+                id: parseInt(data.teamId),
+                name: data.teamName,
+                pressTime: new Date(data.pressTime),
+              }
+            : null,
+        );
       }
     } catch (error) {
       console.error('Error checking buzzer status:', error);
@@ -137,7 +163,6 @@ export default function BuzzerScreenApi({route}) {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({competitionRoundId}),
       });
-
       setFirstPressedTeam(null);
       setAnswerText('');
       setSelectedOption(null);
@@ -146,14 +171,11 @@ export default function BuzzerScreenApi({route}) {
     }
   };
 
-  // Handle waiting team question advancement
+  // Handle question advancement
   useEffect(() => {
     const isOtherTeamPressed =
       firstPressedTeam && firstPressedTeam.id !== teamId;
-
-    // When buzzer resets after another team pressed
     if (firstPressedTeam === null && prevIsOtherTeamPressed.current) {
-      // Move to next question
       const nextIndex = currentQuestionIndex + 1;
       if (nextIndex < questions.length) {
         setCurrentQuestionIndex(nextIndex);
@@ -161,21 +183,24 @@ export default function BuzzerScreenApi({route}) {
         setShowReviewModal(true);
       }
     }
-
-    // Update previous state
     prevIsOtherTeamPressed.current = isOtherTeamPressed;
   }, [firstPressedTeam]);
 
-  // Load new question when index changes
+  // Load new question
   useEffect(() => {
     if (questions.length > 0 && currentQuestionIndex < questions.length) {
       loadQuestionDetails(questions[currentQuestionIndex].questionId);
-      resetBuzzer(); // Reset buzzer for new question
+      resetBuzzer();
     }
   }, [currentQuestionIndex]);
 
-  // Handle buzzer press
+  // Press buzzer handler
   const pressBuzzer = useCallback(async () => {
+    if (!isTeamDataReady) {
+      Alert.alert('Please wait', 'Team data is still loading');
+      return;
+    }
+
     try {
       const currentQuestion = questions[currentQuestionIndex];
       if (!currentQuestion) {
@@ -185,37 +210,43 @@ export default function BuzzerScreenApi({route}) {
 
       const response = await fetch(`${Config.BASE_URL}/api/buzzer/press`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-          teamId,
-          teamName,
+          teamId: parseInt(teamId),
+          teamName: teamName.trim(),
           questionId: currentQuestion.questionId,
-          competitionRoundId,
+          competitionRoundId: parseInt(competitionRoundId),
         }),
       });
 
       const result = await response.json();
       if (result.success) {
         setFirstPressedTeam({
-          id: teamId,
-          name: teamName,
-          pressTime: new Date(result.pressTime),
+          id: parseInt(teamId),
+          name: teamName.trim(),
+          pressTime: new Date(),
         });
       } else {
-        Alert.alert(
-          'Buzzer Taken',
-          `${result.firstPressTeamName} pressed first at ${new Date(
-            result.pressTime,
-          ).toLocaleTimeString()}`,
-        );
+        setFirstPressedTeam({
+          id: parseInt(result.firstPressTeamId),
+          name: result.firstPressTeamName,
+          pressTime: new Date(result.pressTime),
+        });
       }
     } catch (error) {
-      Alert.alert('Error', error.toString());
+      console.error('Buzzer error:', error);
+      Alert.alert('Error', 'Failed to press buzzer');
     }
-  }, [competitionRoundId, currentQuestionIndex, questions, teamId, teamName]);
+  }, [
+    isTeamDataReady,
+    teamId,
+    teamName,
+    currentQuestionIndex,
+    questions,
+    competitionRoundId,
+  ]);
 
+  // Move to next question
   const moveToNextQuestion = useCallback(() => {
     const nextIndex = currentQuestionIndex + 1;
     if (nextIndex < questions.length) {
@@ -227,12 +258,13 @@ export default function BuzzerScreenApi({route}) {
 
   // Submit answer
   const submitAnswer = async () => {
-    if (!question) return;
+    if (!question || !teamId || !teamName) {
+      Alert.alert('Error', 'Team information not loaded');
+      return;
+    }
 
     try {
       setIsSubmitting(true);
-
-      // Prepare the answer data
       const answerValue =
         question.type === 1
           ? answerText.trim()
@@ -257,12 +289,8 @@ export default function BuzzerScreenApi({route}) {
         },
       ]);
 
-      // Prepare payload - using the same structure as handleSubmit
-      const competitionId = 1;
-      // const competitionRoundId = await AsyncStorage.getItem(
-      //   'competitionRoundId',
-      // );
-
+      // Prepare payload
+      const competitionId = await AsyncStorage.getItem('competitionId');
       const payload = [
         {
           competitionId: parseInt(competitionId),
@@ -275,53 +303,26 @@ export default function BuzzerScreenApi({route}) {
         },
       ];
 
-      console.log('Submitting answer:', JSON.stringify(payload, null, 2));
-
-      // Submit to competition API - same endpoint as handleSubmit
+      // Submit answer
       const response = await fetch(
         `${Config.BASE_URL}/api/CompetitionAttemptedQuestion/AddCompetitionAttemptedQuestion`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
+          headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(payload),
         },
       );
 
-      if (!response.ok) {
-        const errorResponse = await response.json();
-        console.error('API Error Details:', errorResponse);
-        throw new Error('Submission failed');
-      }
+      if (!response.ok) throw new Error('Submission failed');
 
-      const responseData = await response.json();
-      console.log('Submission successful:', responseData);
-
-      Alert.alert('Success', 'Answer submitted successfully!');
-
-      // Submit round results (like in handleSubmit)
+      // Submit round results
       const roundResultPayload = {
         competitionRoundId: parseInt(competitionRoundId),
         teamId: parseInt(teamId),
         totalScore: isCorrect ? question.marks : 0,
       };
 
-      const roundResultRes = await fetch(
-        `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
-        {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(roundResultPayload),
-        },
-      );
-
-      if (!roundResultRes.ok) {
-        console.error('Failed to update round results');
-      }
-
-      // Reset buzzer and move to next question
+      Alert.alert('Success', 'Answer submitted!');
       await resetBuzzer();
       moveToNextQuestion();
       setAnswerText('');
@@ -334,18 +335,43 @@ export default function BuzzerScreenApi({route}) {
     }
   };
 
+  const handleCloseModal = async () => {
+    try {
+      // No need to calculate or send any payload
+      const response = await fetch(
+        `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+        {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          // No body needed since the API doesn't use it
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to save round results');
+      }
+
+      // Close modal and navigate
+      setShowReviewModal(false);
+      //   navigation.navigate('StudentHome');
+    } catch (error) {
+      console.error('Error saving round results:', error);
+      Alert.alert('Error', 'Failed to save results, please try again');
+    }
+  };
+
   // Initial load
   useEffect(() => {
     fetchQuestions();
   }, [fetchQuestions]);
 
-  // Set up polling for buzzer status
+  // Poll buzzer status
   useEffect(() => {
     const interval = setInterval(checkBuzzerStatus, 1000);
     return () => clearInterval(interval);
   }, [checkBuzzerStatus]);
 
-  // Render the answer review modal
+  // Render review modal
   const renderReviewModal = () => (
     <Modal
       animationType="slide"
@@ -369,7 +395,7 @@ export default function BuzzerScreenApi({route}) {
           </ScrollView>
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={() => setShowReviewModal(false)}>
+            onPress={() => handleCloseModal()}>
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
         </View>
@@ -377,8 +403,17 @@ export default function BuzzerScreenApi({route}) {
     </Modal>
   );
 
-  const isFirstPress = firstPressedTeam?.id === teamId;
-  const isOtherTeamPressed = firstPressedTeam && !isFirstPress;
+  if (!isTeamDataReady) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#FFD700" />
+        <Text style={styles.loadingText}>Loading team data...</Text>
+      </View>
+    );
+  }
+
+  const isMyTeamPressed = firstPressedTeam?.id === teamId;
+  const isOtherTeamPressed = firstPressedTeam && !isMyTeamPressed;
 
   return (
     <View style={styles.container}>
@@ -415,7 +450,7 @@ export default function BuzzerScreenApi({route}) {
               <Text style={styles.buttonText}>PRESS BUZZER</Text>
             </TouchableOpacity>
           </View>
-        ) : isFirstPress ? (
+        ) : isMyTeamPressed ? (
           <View style={styles.answerContainer}>
             <Text style={styles.successText}>You pressed first!</Text>
 
@@ -496,6 +531,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     marginTop: 5,
+  },
+  loadingText: {
+    color: '#FFD700',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 20,
   },
   questionContainer: {
     backgroundColor: '#222',

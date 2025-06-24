@@ -62,26 +62,27 @@ const SpeedProgrammingScreen = () => {
   }, [teamId, competitionRoundId]);
 
   const checkQualificationStatus = async () => {
-    if (competitionRoundId <= 1) {
-      setIsQualified(true);
-      fetchQuestions();
-    } else {
-      console.log(
-        'Checking url status...',
-        `${
+    try {
+      const roundRes = await fetch(
+        `${Config.BASE_URL}/api/CompetitionRound/IsFirstRound/${competitionRoundId}`,
+      );
+
+      const isFirstRound = await roundRes.json();
+
+      if (isFirstRound === true) {
+        setIsQualified(true);
+        fetchQuestions();
+      } else {
+        const url = `${
           Config.BASE_URL
         }/api/RoundResult/CheckQualificationStatus/${teamId}/${
           competitionRoundId - 1
-        }`,
-      );
-      const url = `${
-        Config.BASE_URL
-      }/api/RoundResult/CheckQualificationStatus/${teamId}/${
-        competitionRoundId - 1
-      }`;
-      try {
+        }`;
+        console.log('Checking qualification status from URL:', url);
+
         const response = await fetch(url);
         const data = await response.json();
+
         if (data.isQualified) {
           setIsQualified(true);
           fetchQuestions();
@@ -93,10 +94,10 @@ const SpeedProgrammingScreen = () => {
             [{text: 'OK', onPress: () => navigation.goBack()}],
           );
         }
-      } catch (error) {
-        console.error('Error checking qualification status:', error);
-        Alert.alert('Error', 'Failed to check qualification status.');
       }
+    } catch (error) {
+      console.error('Error checking qualification status:', error);
+      Alert.alert('Error', 'Failed to check qualification status.');
     }
   };
 
@@ -218,32 +219,28 @@ const SpeedProgrammingScreen = () => {
         },
       );
 
-      if (response.ok) {
-        const res = await fetch(
-          `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
-          {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-              competitionId,
-              competitionRoundId,
-              teamId,
-            }),
-          },
-        );
+      // if (response.ok) {
+      //   const res = await fetch(
+      //     `${Config.BASE_URL}/api/RoundResult/insertroundresults`,
+      //     {
+      //       method: 'POST',
+      //       headers: {'Content-Type': 'application/json'},
+      //       // No body needed since the API doesn't use it
+      //     },
+      //   );
 
-        if (res.ok) {
-          Alert.alert(
-            'Submitted',
-            'Your answers have been submitted and round results recorded!',
-          );
-          setShowReview(false);
-        } else {
-          Alert.alert('Error', 'Failed to submit round results');
-        }
-      } else {
-        Alert.alert('Error', 'Submission failed');
-      }
+      //   if (res.ok) {
+      //     Alert.alert(
+      //       'Submitted',
+      //       'Your answers have been submitted and round results recorded!',
+      //     );
+      //     setShowReview(false);
+      //   } else {
+      //     Alert.alert('Error', 'Failed to submit round results');
+      //   }
+      // } else {
+      //   Alert.alert('Error', 'Submission failed');
+      // }
     } catch (err) {
       console.error(err);
       Alert.alert('Error', 'Submission error');
