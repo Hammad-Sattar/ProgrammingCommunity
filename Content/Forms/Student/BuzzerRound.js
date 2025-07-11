@@ -32,8 +32,63 @@ export default function BuzzerScreen({route}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [userAnswers, setUserAnswers] = useState([]);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [timerActive, setTimerActive] = useState(false);
 
   const prevIsOtherTeamPressed = useRef(false);
+  const timerRef = useRef(null);
+
+  // Timer countdown
+  useEffect(() => {
+    if (timerActive && timeLeft > 0) {
+      timerRef.current = setTimeout(() => {
+        setTimeLeft(timeLeft - 1);
+      }, 1000);
+    } else if (timerActive && timeLeft === 0) {
+      // Timeout occurred
+      handleTimeout();
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [timerActive, timeLeft]);
+
+  const startTimer = () => {
+    setTimeLeft(30);
+    setTimerActive(true);
+  };
+
+  const stopTimer = () => {
+    setTimerActive(false);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+  };
+
+  const handleTimeout = async () => {
+    stopTimer();
+
+    // Add timeout entry to user answers
+    setUserAnswers(prev => [
+      ...prev,
+      {
+        teamId: teamId,
+        teamName: teamName,
+        questionId: question.id,
+        questionText: question.text,
+        answer: 'Timeout',
+        isCorrect: false,
+        isTimeout: true,
+      },
+    ]);
+
+    Alert.alert('Timeout', 'You ran out of time for this question');
+    await resetBuzzer();
+    moveToNextQuestion();
+  };
 
   // Fetch team data
   useEffect(() => {
@@ -132,9 +187,7 @@ export default function BuzzerScreen({route}) {
   // Check buzzer status
   const checkBuzzerStatus = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${Config.BASE_URL}/api/buzzer/status?competitionRoundId=${competitionRoundId}`,
-      );
+      const response = await fetch(`${Config.BASE_URL}/api/buzzer/status`);
 
       if (response.status === 404) {
         setFirstPressedTeam(null);
@@ -166,6 +219,7 @@ export default function BuzzerScreen({route}) {
       setFirstPressedTeam(null);
       setAnswerText('');
       setSelectedOption(null);
+      stopTimer();
     } catch (error) {
       console.error('Error resetting buzzer:', error);
     }
@@ -226,6 +280,7 @@ export default function BuzzerScreen({route}) {
           name: teamName.trim(),
           pressTime: new Date(),
         });
+        startTimer(); // Start the timer when user presses first
       } else {
         setFirstPressedTeam({
           id: parseInt(result.firstPressTeamId),
@@ -265,6 +320,8 @@ export default function BuzzerScreen({route}) {
 
     try {
       setIsSubmitting(true);
+      stopTimer(); // Stop the timer when submitting answer
+
       const answerValue =
         question.type === 1
           ? answerText.trim()
@@ -286,6 +343,7 @@ export default function BuzzerScreen({route}) {
           questionText: question.text,
           answer: answerValue,
           isCorrect: isCorrect,
+          isTimeout: false,
         },
       ]);
 
@@ -383,13 +441,33 @@ export default function BuzzerScreen({route}) {
           <Text style={styles.modalTitle}>Your Answers</Text>
           <ScrollView>
             {userAnswers.map((answer, index) => (
-              <View key={index} style={styles.answerItem}>
+              <View
+                key={index}
+                style={[
+                  styles.answerItem,
+                  answer.isTimeout && styles.timeoutItem,
+                ]}>
                 <Text style={styles.questionText}>
                   Q{index + 1}: {answer.questionText}
                 </Text>
-                <Text style={styles.answerText}>
-                  Your answer: {answer.answer}
+                <Text
+                  style={[
+                    styles.answerText,
+                    answer.isTimeout && styles.timeoutText,
+                  ]}>
+                  {answer.isTimeout
+                    ? 'Timeout - No answer submitted'
+                    : `Your answer: ${answer.answer}`}
                 </Text>
+                {answer.isCorrect !== undefined && !answer.isTimeout && (
+                  <Text
+                    style={[
+                      styles.correctText,
+                      answer.isCorrect ? styles.correct : styles.incorrect,
+                    ]}>
+                    {answer.isCorrect ? 'Correct!' : 'Incorrect'}
+                  </Text>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -452,6 +530,9 @@ export default function BuzzerScreen({route}) {
           </View>
         ) : isMyTeamPressed ? (
           <View style={styles.answerContainer}>
+            <View style={styles.timerContainer}>
+              <Text style={styles.timerText}>Time left: {timeLeft}s</Text>
+            </View>
             <Text style={styles.successText}>You pressed first!</Text>
 
             {question.type === 2 ? (
@@ -582,6 +663,18 @@ const styles = StyleSheet.create({
   answerContainer: {
     padding: 16,
   },
+  timerContainer: {
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 5,
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  timerText: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   successText: {
     color: '#4CAF50',
     fontSize: 20,
@@ -674,14 +767,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
-  questionText: {
-    color: '#FFD700',
-    fontSize: 16,
+  timeoutItem: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#FF5722',
   },
   answerText: {
     color: '#FFF',
     fontSize: 14,
     marginTop: 5,
+  },
+  timeoutText: {
+    color: '#FF5722',
+    fontWeight: 'bold',
+  },
+  correctText: {
+    fontSize: 14,
+    marginTop: 5,
+    fontWeight: 'bold',
+  },
+  correct: {
+    color: '#4CAF50',
+  },
+  incorrect: {
+    color: '#FF5722',
   },
   closeButton: {
     backgroundColor: '#FFD700',

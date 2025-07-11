@@ -13,8 +13,8 @@ import {
 import Config from '../Settings/Config';
 
 export default function BuzzerScreenApi({route}) {
-  const teamId = 2;
-  const teamName = 'Team B';
+  const teamId = 1;
+  const teamName = 'Team A';
   const competitionRoundId = 9;
 
   const [firstPressedTeam, setFirstPressedTeam] = useState(null);
@@ -28,9 +28,63 @@ export default function BuzzerScreenApi({route}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [userAnswers, setUserAnswers] = useState([]);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [timerActive, setTimerActive] = useState(false);
 
   // Track previous waiting state
   const prevIsOtherTeamPressed = useRef(false);
+  const timerRef = useRef(null);
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (timerActive && timeLeft > 0) {
+      timerRef.current = setTimeout(() => {
+        setTimeLeft(timeLeft - 1);
+      }, 1000);
+    } else if (timerActive && timeLeft === 0) {
+      handleTimeout();
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [timerActive, timeLeft]);
+
+  const startTimer = () => {
+    setTimeLeft(30);
+    setTimerActive(true);
+  };
+
+  const stopTimer = () => {
+    setTimerActive(false);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+  };
+
+  const handleTimeout = async () => {
+    stopTimer();
+
+    // Add timeout entry to user answers
+    setUserAnswers(prev => [
+      ...prev,
+      {
+        teamId: teamId,
+        teamName: teamName,
+        questionId: question.id,
+        questionText: question.text,
+        answer: 'Timeout',
+        isCorrect: false,
+        isTimeout: true,
+      },
+    ]);
+
+    Alert.alert('Timeout', 'You ran out of time for this question');
+    await resetBuzzer();
+    moveToNextQuestion();
+  };
 
   // Fetch all questions for the competition round
   const fetchQuestions = useCallback(async () => {
@@ -104,9 +158,7 @@ export default function BuzzerScreenApi({route}) {
   // Check current buzzer status
   const checkBuzzerStatus = useCallback(async () => {
     try {
-      const response = await fetch(
-        `${Config.BASE_URL}/api/buzzer/status?competitionRoundId=${competitionRoundId}`,
-      );
+      const response = await fetch(`${Config.BASE_URL}/api/buzzer/status`);
 
       if (response.status === 404) {
         setFirstPressedTeam(null);
@@ -141,6 +193,7 @@ export default function BuzzerScreenApi({route}) {
       setFirstPressedTeam(null);
       setAnswerText('');
       setSelectedOption(null);
+      stopTimer();
     } catch (error) {
       console.error('Error resetting buzzer:', error);
     }
@@ -203,6 +256,7 @@ export default function BuzzerScreenApi({route}) {
           name: teamName,
           pressTime: new Date(result.pressTime),
         });
+        startTimer(); // Start timer when user presses first
       } else {
         Alert.alert(
           'Buzzer Taken',
@@ -231,6 +285,7 @@ export default function BuzzerScreenApi({route}) {
 
     try {
       setIsSubmitting(true);
+      stopTimer(); // Stop timer when submitting answer
 
       // Prepare the answer data
       const answerValue =
@@ -254,14 +309,12 @@ export default function BuzzerScreenApi({route}) {
           questionText: question.text,
           answer: answerValue,
           isCorrect: isCorrect,
+          isTimeout: false,
         },
       ]);
 
-      // Prepare payload - using the same structure as handleSubmit
+      // Prepare payload
       const competitionId = 1;
-      // const competitionRoundId = await AsyncStorage.getItem(
-      //   'competitionRoundId',
-      // );
 
       const payload = [
         {
@@ -277,7 +330,7 @@ export default function BuzzerScreenApi({route}) {
 
       console.log('Submitting answer:', JSON.stringify(payload, null, 2));
 
-      // Submit to competition API - same endpoint as handleSubmit
+      // Submit to competition API
       const response = await fetch(
         `${Config.BASE_URL}/api/CompetitionAttemptedQuestion/AddCompetitionAttemptedQuestion`,
         {
@@ -301,7 +354,7 @@ export default function BuzzerScreenApi({route}) {
 
       Alert.alert('Success', 'Answer submitted successfully!');
 
-      // Submit round results (like in handleSubmit)
+      // Submit round results
       const roundResultPayload = {
         competitionRoundId: parseInt(competitionRoundId),
         teamId: parseInt(teamId),
@@ -357,13 +410,35 @@ export default function BuzzerScreenApi({route}) {
           <Text style={styles.modalTitle}>Your Answers</Text>
           <ScrollView>
             {userAnswers.map((answer, index) => (
-              <View key={index} style={styles.answerItem}>
+              <View
+                key={index}
+                style={[
+                  styles.answerItem,
+                  answer.isTimeout && styles.timeoutItem,
+                ]}>
                 <Text style={styles.questionText}>
                   Q{index + 1}: {answer.questionText}
                 </Text>
-                <Text style={styles.answerText}>
-                  Your answer: {answer.answer}
+                <Text
+                  style={[
+                    styles.answerText,
+                    answer.isTimeout && styles.timeoutText,
+                  ]}>
+                  {answer.isTimeout
+                    ? 'Timeout - No answer submitted'
+                    : `Your answer: ${answer.answer}`}
                 </Text>
+                {!answer.isTimeout && (
+                  <Text
+                    style={[
+                      styles.correctnessText,
+                      answer.isCorrect
+                        ? styles.correctText
+                        : styles.incorrectText,
+                    ]}>
+                    {answer.isCorrect ? 'Correct!' : 'Incorrect'}
+                  </Text>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -417,6 +492,9 @@ export default function BuzzerScreenApi({route}) {
           </View>
         ) : isFirstPress ? (
           <View style={styles.answerContainer}>
+            <View style={styles.timerContainer}>
+              <Text style={styles.timerText}>Time left: {timeLeft}s</Text>
+            </View>
             <Text style={styles.successText}>You pressed first!</Text>
 
             {question.type === 2 ? (
@@ -541,6 +619,18 @@ const styles = StyleSheet.create({
   answerContainer: {
     padding: 16,
   },
+  timerContainer: {
+    backgroundColor: '#333',
+    padding: 10,
+    borderRadius: 5,
+    alignSelf: 'center',
+    marginBottom: 10,
+  },
+  timerText: {
+    color: '#FFD700',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
   successText: {
     color: '#4CAF50',
     fontSize: 20,
@@ -633,6 +723,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 10,
   },
+  timeoutItem: {
+    borderLeftWidth: 5,
+    borderLeftColor: '#FF5722',
+  },
   questionText: {
     color: '#FFD700',
     fontSize: 16,
@@ -641,6 +735,21 @@ const styles = StyleSheet.create({
     color: '#FFF',
     fontSize: 14,
     marginTop: 5,
+  },
+  timeoutText: {
+    color: '#FF5722',
+    fontWeight: 'bold',
+  },
+  correctnessText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 5,
+  },
+  correctText: {
+    color: '#4CAF50',
+  },
+  incorrectText: {
+    color: '#FF5722',
   },
   closeButton: {
     backgroundColor: '#FFD700',

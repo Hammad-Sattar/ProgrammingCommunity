@@ -219,8 +219,8 @@ const RegistrationScreen = () => {
           items={[
             {label: 'Admin', value: '1'},
             {label: 'Expert', value: '2'},
-            {label: 'Campus Student', value: '3'},
-            {label: 'Inter Campus Student', value: '4'},
+            {label: ' Student', value: '3'},
+            // {label: 'Inter Campus Student', value: '4'},
           ]}
         />
       </View>

@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
 import Config from '../../Settings/Config';
 import {useRoute, useNavigation} from '@react-navigation/native';
@@ -28,6 +29,10 @@ const TaskAnswerScreen = () => {
   const [userId, setUserId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submittedAnswers, setSubmittedAnswers] = useState([]);
+  const [showReview, setShowReview] = useState(false);
+  const [score, setScore] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [questionsData, setQuestionsData] = useState([]);
 
   useEffect(() => {
     (async () => {
@@ -134,6 +139,63 @@ const TaskAnswerScreen = () => {
     }
   };
 
+  const calculateScore = async answers => {
+    try {
+      let correctCount = 0;
+      const questionsWithAnswers = [];
+
+      for (const answer of answers) {
+        const questionRes = await fetch(
+          `${Config.BASE_URL}/api/Questions/GetQuestionById/${answer.questionId}`,
+        );
+        const questionData = await questionRes.json();
+
+        let isCorrect = false;
+        let correctAnswerText = '';
+
+        if (questionData.type === 2) {
+          const optionsRes = await fetch(
+            `${Config.BASE_URL}/api/QuestionOption/GetOptionsByQuestionId?questionId=${answer.questionId}`,
+          );
+          const options = await optionsRes.json();
+          const correctOption = options.find(opt => opt.isCorrect);
+          correctAnswerText = correctOption?.option || '';
+
+          if (correctOption && answer.answer === correctOption.option) {
+            correctCount++;
+            isCorrect = true;
+          }
+        } else {
+          correctAnswerText = questionData.correctAnswer || '';
+          if (
+            answer.answer.trim().toLowerCase() ===
+            correctAnswerText.trim().toLowerCase()
+          ) {
+            correctCount++;
+            isCorrect = true;
+          }
+        }
+
+        questionsWithAnswers.push({
+          ...questionData,
+          userAnswer: answer.answer,
+          isCorrect,
+          correctAnswer: correctAnswerText,
+        });
+      }
+
+      const calculatedScore = Math.round((correctCount / totalQuestions) * 100);
+      setCorrectAnswers(correctCount);
+      setScore(calculatedScore);
+      setQuestionsData(questionsWithAnswers);
+
+      return calculatedScore;
+    } catch (error) {
+      console.error('Error calculating score:', error);
+      return 0;
+    }
+  };
+
   const handleFinalSubmit = async () => {
     if (!question) return;
 
@@ -173,19 +235,141 @@ const TaskAnswerScreen = () => {
     }
 
     setSubmitting(true);
+
     await fetch(`${Config.BASE_URL}/api/SubmittedTask/AddSubmittedTask`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(tempAnswers),
     });
+
     await fetch(`${Config.BASE_URL}/api/Task/Attempt/${taskId}`, {
       method: 'PUT',
     });
 
+    const userScore = await calculateScore(tempAnswers);
+
     setSubmitting(false);
-    Alert.alert('Success', 'All answers submitted!');
-    navigation.goBack();
+    setShowReview(true);
+
+    let levelMessage = '';
+    if (userScore >= 50 && userScore < 70) {
+      levelMessage = 'Good job! You reached Level 1.';
+    } else if (userScore >= 70 && userScore < 100) {
+      levelMessage = 'Excellent! You reached Level 2.';
+    } else if (userScore === 100) {
+      levelMessage = 'Perfect! You reached the highest Level 3!';
+    }
+
+    if (levelMessage) {
+      Alert.alert('Level Up!', `${levelMessage} You scored ${userScore}%!`, [
+        {
+          text: 'OK',
+          onPress: () => navigation.goBack(),
+        },
+      ]);
+    }
   };
+
+  const renderScoreProgress = () => {
+    const progressWidth = `${score}%`;
+
+    let progressColor = '#FF5555';
+    if (score >= 50 && score < 70) {
+      progressColor = '#FFD700';
+    } else if (score >= 70 && score < 100) {
+      progressColor = '#55FF55';
+    } else if (score === 100) {
+      progressColor = '#00AA00';
+    }
+
+    return (
+      <View style={styles.progressContainer}>
+        <View style={styles.progressBarBackground}>
+          <View
+            style={[
+              styles.progressBarFill,
+              {width: progressWidth, backgroundColor: progressColor},
+            ]}
+          />
+        </View>
+        <View style={styles.milestoneContainer}>
+          <View style={[styles.milestone, {left: '50%'}]} />
+          <View style={[styles.milestone, {left: '70%'}]} />
+          <View style={[styles.milestone, {left: '100%'}]} />
+        </View>
+        <View style={styles.milestoneLabels}>
+          <Text style={styles.milestoneLabel}>L1</Text>
+          <Text style={styles.milestoneLabel}>L2</Text>
+          <Text style={styles.milestoneLabel}>L3</Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderReviewModal = () => (
+    <Modal
+      visible={showReview}
+      animationType="slide"
+      transparent={false}
+      onRequestClose={() => setShowReview(false)}>
+      <View style={styles.modalContainer}>
+        <Text style={styles.modalTitle}>Quiz Results</Text>
+
+        {renderScoreProgress()}
+
+        <View style={styles.scoreContainer}>
+          <Text style={styles.scoreText}>Your Score: {score}%</Text>
+          <Text style={styles.detailText}>
+            Correct Answers: {correctAnswers}/{totalQuestions}
+          </Text>
+          {score >= 50 && (
+            <Text style={styles.levelText}>
+              {score >= 50 && score < 70 && 'Level 1 Achieved!'}
+              {score >= 70 && score < 100 && 'Level 2 Achieved!'}
+              {score === 100 && 'Level 3 Achieved - Perfect Score!'}
+            </Text>
+          )}
+        </View>
+
+        <ScrollView style={styles.answersContainer}>
+          {questionsData.map((item, index) => (
+            <View
+              key={index}
+              style={[
+                styles.answerItem,
+                item.isCorrect ? styles.correctAnswer : styles.wrongAnswer,
+              ]}>
+              <Text style={styles.questionText}>
+                Q{index + 1}: {item.text}
+              </Text>
+              <Text style={styles.answerText}>
+                Your Answer: {item.userAnswer}
+              </Text>
+              {!item.isCorrect && (
+                <Text style={styles.correctAnswerText}>
+                  Correct Answer: {item.correctAnswer}
+                </Text>
+              )}
+              <View style={styles.answerStatus}>
+                <Text style={styles.answerStatusText}>
+                  {item.isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => {
+            setShowReview(false);
+            navigation.goBack();
+          }}>
+          <Text style={styles.closeButtonText}>Close</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
 
   if (loading) {
     return (
@@ -256,6 +440,8 @@ const TaskAnswerScreen = () => {
           </TouchableOpacity>
         )}
       </View>
+
+      {renderReviewModal()}
     </ScrollView>
   );
 };
@@ -303,6 +489,132 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   navBtn: {padding: 12, backgroundColor: '#FFD700', borderRadius: 6},
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#111',
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    color: '#FFD700',
+    textAlign: 'center',
+    marginBottom: 20,
+    fontWeight: 'bold',
+  },
+  progressContainer: {
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  progressBarBackground: {
+    height: 20,
+    backgroundColor: '#333',
+    borderRadius: 10,
+    overflow: 'hidden',
+    marginBottom: 5,
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 10,
+  },
+  milestoneContainer: {
+    width: '100%',
+    height: 20,
+    position: 'relative',
+  },
+  milestone: {
+    position: 'absolute',
+    top: -25,
+    width: 2,
+    height: 25,
+    backgroundColor: '#FFF',
+  },
+  milestoneLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 5,
+  },
+  milestoneLabel: {
+    color: '#FFD700',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  scoreContainer: {
+    backgroundColor: '#222',
+    padding: 20,
+    borderRadius: 10,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  scoreText: {
+    fontSize: 24,
+    color: '#FFD700',
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  detailText: {
+    fontSize: 16,
+    color: '#FFF',
+  },
+  levelText: {
+    color: '#FFD700',
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  answersContainer: {
+    flex: 1,
+    marginBottom: 20,
+  },
+  answerItem: {
+    backgroundColor: '#222',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  correctAnswer: {
+    backgroundColor: '#1a2e1a',
+    borderLeftWidth: 5,
+    borderLeftColor: '#55FF55',
+  },
+  wrongAnswer: {
+    backgroundColor: '#2e1a1a',
+    borderLeftWidth: 5,
+    borderLeftColor: '#FF5555',
+  },
+  questionText: {
+    color: '#FFD700',
+    fontSize: 16,
+    marginBottom: 5,
+  },
+  answerText: {
+    color: '#FFF',
+    fontSize: 14,
+  },
+  correctAnswerText: {
+    color: '#55FF55',
+    fontSize: 14,
+    marginTop: 5,
+  },
+  answerStatus: {
+    marginTop: 5,
+    alignItems: 'flex-end',
+  },
+  answerStatusText: {
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  closeButton: {
+    backgroundColor: '#FFD700',
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
 });
 
 export default TaskAnswerScreen;
